@@ -135,7 +135,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, info *relaycommon.RelayInfo, re
 		c.Set("request_model", request.Model)
 		return vertexClaudeReq, nil
 	} else if a.RequestMode == RequestModeGemini {
-		geminiRequest := gemini.CovertGemini2OpenAI(*request)
+		geminiRequest, err := gemini.CovertGemini2OpenAI(*request)
+		if err != nil {
+			return nil, err
+		}
 		c.Set("request_model", request.Model)
 		return geminiRequest, nil
 	} else if a.RequestMode == RequestModeLlama {
@@ -167,7 +170,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		case RequestModeClaude:
 			err, usage = claude.ClaudeHandler(c, resp, claude.RequestModeMessage, info)
 		case RequestModeGemini:
-			err, usage = gemini.GeminiChatHandler(c, resp)
+			err, usage = gemini.GeminiChatHandler(c, resp, info)
 		case RequestModeLlama:
 			err, usage = openai.OpenaiHandler(c, resp, info.PromptTokens, info.OriginModelName)
 		}
@@ -176,7 +179,20 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 }
 
 func (a *Adaptor) GetModelList() []string {
-	return ModelList
+	var modelList []string
+	for i, s := range ModelList {
+		modelList = append(modelList, s)
+		ModelList[i] = s
+	}
+	for i, s := range claude.ModelList {
+		modelList = append(modelList, s)
+		claude.ModelList[i] = s
+	}
+	for i, s := range gemini.ModelList {
+		modelList = append(modelList, s)
+		gemini.ModelList[i] = s
+	}
+	return modelList
 }
 
 func (a *Adaptor) GetChannelName() string {
