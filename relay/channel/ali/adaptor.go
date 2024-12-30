@@ -219,30 +219,22 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 	return channel.DoApiRequest(a, c, info, requestBody)
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	switch info.RelayFormat {
-	case types.RelayFormatClaude:
-		if supportsAliAnthropicMessages(info.UpstreamModelName) {
-			adaptor := claude.Adaptor{}
-			return adaptor.DoResponse(c, resp, info)
-		}
 
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *dto.OpenAIErrorWithStatusCode) {
+	switch info.RelayMode {
+	case constant.RelayModeImagesGenerations:
+		err, usage = aliImageHandler(c, resp, info)
+	case constant.RelayModeEmbeddings:
+		err, usage = aliEmbeddingHandler(c, resp, info)
+	default:
+		if info.IsStream {
+			err, usage = openai.OaiStreamHandler(c, resp, info)
+		} else {
+			err, usage = openai.OpenaiHandler(c, resp, info.PromptTokens, info.UpstreamModelName)
+		}
 		adaptor := openai.Adaptor{}
 		return adaptor.DoResponse(c, resp, info)
-	default:
-		switch info.RelayMode {
-		case constant.RelayModeImagesGenerations:
-			err, usage = aliImageHandler(a, c, resp, info)
-		case constant.RelayModeImagesEdits:
-			err, usage = aliImageHandler(a, c, resp, info)
-		case constant.RelayModeRerank:
-			err, usage = RerankHandler(c, resp, info)
-		default:
-			adaptor := openai.Adaptor{}
-			usage, err = adaptor.DoResponse(c, resp, info)
-		}
-		return usage, err
-	}
+	
 }
 
 func (a *Adaptor) GetModelList() []string {
