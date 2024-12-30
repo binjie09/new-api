@@ -81,7 +81,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	case constant.RelayModeImagesGenerations:
 		err, usage = aliImageHandler(c, resp, info)
 	case constant.RelayModeEmbeddings:
-		err, usage = aliEmbeddingHandler(c, resp)
+		err, usage = aliEmbeddingHandler(c, resp, info)
 	default:
 		if info.IsStream {
 			err, usage = openai.OaiStreamHandler(c, resp, info)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"one-api/common"
+	relaycommon "one-api/relay/common"
 	"one-api/dto"
 	"one-api/service"
 	"strings"
@@ -27,7 +28,7 @@ func requestOpenAI2Ali(request dto.GeneralOpenAIRequest) *dto.GeneralOpenAIReque
 
 func embeddingRequestOpenAI2Ali(request dto.GeneralOpenAIRequest) *AliEmbeddingRequest {
 	return &AliEmbeddingRequest{
-		Model: "text-embedding-v1",
+		Model: request.Model,
 		Input: struct {
 			Texts []string `json:"texts"`
 		}{
@@ -36,7 +37,7 @@ func embeddingRequestOpenAI2Ali(request dto.GeneralOpenAIRequest) *AliEmbeddingR
 	}
 }
 
-func aliEmbeddingHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWithStatusCode, *dto.Usage) {
+func aliEmbeddingHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.OpenAIErrorWithStatusCode, *dto.Usage) {
 	var aliResponse AliEmbeddingResponse
 	err := json.NewDecoder(resp.Body).Decode(&aliResponse)
 	if err != nil {
@@ -60,7 +61,7 @@ func aliEmbeddingHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorW
 		}, nil
 	}
 
-	fullTextResponse := embeddingResponseAli2OpenAI(&aliResponse)
+	fullTextResponse := embeddingResponseAli2OpenAI(&aliResponse, info)
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
@@ -71,11 +72,11 @@ func aliEmbeddingHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorW
 	return nil, &fullTextResponse.Usage
 }
 
-func embeddingResponseAli2OpenAI(response *AliEmbeddingResponse) *dto.OpenAIEmbeddingResponse {
+func embeddingResponseAli2OpenAI(response *AliEmbeddingResponse, info *relaycommon.RelayInfo) *dto.OpenAIEmbeddingResponse {
 	openAIEmbeddingResponse := dto.OpenAIEmbeddingResponse{
 		Object: "list",
 		Data:   make([]dto.OpenAIEmbeddingResponseItem, 0, len(response.Output.Embeddings)),
-		Model:  "text-embedding-v1",
+		Model:  info.UpstreamModelName,
 		Usage:  dto.Usage{TotalTokens: response.Usage.TotalTokens},
 	}
 
