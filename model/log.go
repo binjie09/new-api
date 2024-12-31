@@ -12,16 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var groupCol string
-
-func init() {
-	if common.UsingPostgreSQL {
-		groupCol = `"group"`
-	} else {
-		groupCol = "`group`"
-	}
-}
-
 type Log struct {
 	Id               int    `json:"id" gorm:"index:idx_created_at_id,priority:1"`
 	UserId           int    `json:"user_id" gorm:"index"`
@@ -66,7 +56,7 @@ func formatUserLogs(logs []*Log) {
 func GetLogByKey(key string) (logs []*Log, err error) {
 	if os.Getenv("LOG_SQL_DSN") != "" {
 		var tk Token
-		if err = DB.Model(&Token{}).Where("`key`=?", strings.TrimPrefix(key, "sk-")).First(&tk).Error; err != nil {
+		if err = DB.Model(&Token{}).Where(keyCol+"=?", strings.TrimPrefix(key, "sk-")).First(&tk).Error; err != nil {
 			return nil, err
 		}
 		err = LOG_DB.Model(&Log{}).Where("token_id=?", tk.Id).Find(&logs).Error
