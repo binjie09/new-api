@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"mime/multipart"
 	"net/http"
 	"one-api/common"
 	"one-api/constant"
@@ -13,6 +15,7 @@ import (
 	relaycommon "one-api/relay/common"
 	relayconstant "one-api/relay/constant"
 	"one-api/service"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,21 +23,62 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 )
 
-func sendStreamData(c *gin.Context, data string, forceFormat bool) error {
+func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
 	if data == "" {
 		return nil
 	}
 
-	if forceFormat {
-		var lastStreamResponse dto.ChatCompletionsStreamResponse
-		if err := json.Unmarshal(common.StringToByteSlice(data), &lastStreamResponse); err != nil {
-			return err
-		}
+	if !forceFormat && !thinkToContent {
+		return service.StringData(c, data)
+	}
+
+	var lastStreamResponse dto.ChatCompletionsStreamResponse
+	if err := json.Unmarshal(common.StringToByteSlice(data), &lastStreamResponse); err != nil {
+		return err
+	}
+
+	if !thinkToContent {
 		return service.ObjectData(c, lastStreamResponse)
 	}
-	return service.StringData(c, data)
+
+	// Handle think to content conversion
+	if info.IsFirstResponse {
+		response := lastStreamResponse.Copy()
+		for i := range response.Choices {
+			response.Choices[i].Delta.SetContentString("<think>\n")
+			response.Choices[i].Delta.SetReasoningContent("")
+		}
+		service.ObjectData(c, response)
+	}
+
+	if lastStreamResponse.Choices == nil || len(lastStreamResponse.Choices) == 0 {
+		return service.ObjectData(c, lastStreamResponse)
+	}
+
+	// Process each choice
+	for i, choice := range lastStreamResponse.Choices {
+		// Handle transition from thinking to content
+		if len(choice.Delta.GetContentString()) > 0 && !info.SendLastReasoningResponse {
+			response := lastStreamResponse.Copy()
+			for j := range response.Choices {
+				response.Choices[j].Delta.SetContentString("\n</think>")
+				response.Choices[j].Delta.SetReasoningContent("")
+			}
+			info.SendLastReasoningResponse = true
+			service.ObjectData(c, response)
+		}
+
+		// Convert reasoning content to regular content
+		if len(choice.Delta.GetReasoningContent()) > 0 {
+			lastStreamResponse.Choices[i].Delta.SetContentString(choice.Delta.GetReasoningContent())
+			lastStreamResponse.Choices[i].Delta.SetReasoningContent("")
+		}
+	}
+
+	return service.ObjectData(c, lastStreamResponse)
 }
 
 func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.OpenAIErrorWithStatusCode, *dto.Usage) {
@@ -53,11 +97,14 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 	var usage = &dto.Usage{}
 	var streamItems []string // store stream items
 	var forceFormat bool
+	var thinkToContent bool
 
-	if info.ChannelType == common.ChannelTypeCustom {
-		if forceFmt, ok := info.ChannelSetting["force_format"].(bool); ok {
-			forceFormat = forceFmt
-		}
+	if forceFmt, ok := info.ChannelSetting[constant.ForceFormat].(bool); ok {
+		forceFormat = forceFmt
+	}
+
+	if think2Content, ok := info.ChannelSetting[constant.ChannelSettingThinkingToContent].(bool); ok {
+		thinkToContent = think2Content
 	}
 
 	toolCount := 0
@@ -65,8 +112,12 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 	scanner.Split(bufio.ScanLines)
 
 	service.SetEventStreamHeaders(c)
-
-	ticker := time.NewTicker(time.Duration(constant.StreamingTimeout) * time.Second)
+	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	if strings.HasPrefix(info.UpstreamModelName, "o1") || strings.HasPrefix(info.UpstreamModelName, "o3") {
+		// twice timeout for o1 model
+		streamingTimeout *= 2
+	}
+	ticker := time.NewTicker(streamingTimeout)
 	defer ticker.Stop()
 
 	stopChan := make(chan bool)
@@ -77,23 +128,28 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 	)
 	gopool.Go(func() {
 		for scanner.Scan() {
-			info.SetFirstResponseTime()
+			//info.SetFirstResponseTime()
 			ticker.Reset(time.Duration(constant.StreamingTimeout) * time.Second)
 			data := scanner.Text()
+			if common.DebugEnabled {
+				println(data)
+			}
 			if len(data) < 6 { // ignore blank line or wrong format
 				continue
 			}
-			if data[:6] != "data: " && data[:6] != "[DONE]" {
+			if data[:5] != "data:" && data[:6] != "[DONE]" {
 				continue
 			}
 			mu.Lock()
-			data = data[6:]
+			data = data[5:]
+			data = strings.TrimSpace(data)
 			if !strings.HasPrefix(data, "[DONE]") {
 				if lastStreamData != "" {
-					err := sendStreamData(c, lastStreamData, forceFormat)
+					err := sendStreamData(c, info, lastStreamData, forceFormat, thinkToContent)
 					if err != nil {
 						common.LogError(c, "streaming error: "+err.Error())
 					}
+					info.SetFirstResponseTime()
 				}
 				lastStreamData = data
 				streamItems = append(streamItems, data)
@@ -133,7 +189,7 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 		}
 	}
 	if shouldSendLastResp {
-		sendStreamData(c, lastStreamData, forceFormat)
+		sendStreamData(c, info, lastStreamData, forceFormat, thinkToContent)
 	}
 
 	// 计算token
@@ -154,6 +210,7 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 					//}
 					for _, choice := range streamResponse.Choices {
 						responseTextBuilder.WriteString(choice.Delta.GetContentString())
+						responseTextBuilder.WriteString(choice.Delta.GetReasoningContent())
 						if choice.Delta.ToolCalls != nil {
 							if len(choice.Delta.ToolCalls) > toolCount {
 								toolCount = len(choice.Delta.ToolCalls)
@@ -174,6 +231,7 @@ func OaiStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 				//}
 				for _, choice := range streamResponse.Choices {
 					responseTextBuilder.WriteString(choice.Delta.GetContentString())
+					responseTextBuilder.WriteString(choice.Delta.GetReasoningContent())
 					if choice.Delta.ToolCalls != nil {
 						if len(choice.Delta.ToolCalls) > toolCount {
 							toolCount = len(choice.Delta.ToolCalls)
@@ -265,7 +323,7 @@ func OpenaiHandler(c *gin.Context, resp *http.Response, promptTokens int, model 
 	if simpleResponse.Usage.TotalTokens == 0 || (simpleResponse.Usage.PromptTokens == 0 && simpleResponse.Usage.CompletionTokens == 0) {
 		completionTokens := 0
 		for _, choice := range simpleResponse.Choices {
-			ctkm, _ := service.CountTextToken(string(choice.Message.Content), model)
+			ctkm, _ := service.CountTextToken(choice.Message.StringContent()+choice.Message.ReasoningContent, model)
 			completionTokens += ctkm
 		}
 		simpleResponse.Usage = dto.Usage{
@@ -312,6 +370,11 @@ func OpenaiTTSHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 }
 
 func OpenaiSTTHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, responseFormat string) (*dto.OpenAIErrorWithStatusCode, *dto.Usage) {
+	// count tokens by audio file duration
+	audioTokens, err := countAudioTokens(c)
+	if err != nil {
+		return service.OpenAIErrorWrapper(err, "count_audio_tokens_failed", http.StatusInternalServerError), nil
+	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
@@ -336,70 +399,52 @@ func OpenaiSTTHandler(c *gin.Context, resp *http.Response, info *relaycommon.Rel
 	}
 	resp.Body.Close()
 
-	var text string
-	switch responseFormat {
-	case "json":
-		text, err = getTextFromJSON(responseBody)
-	case "text":
-		text, err = getTextFromText(responseBody)
-	case "srt":
-		text, err = getTextFromSRT(responseBody)
-	case "verbose_json":
-		text, err = getTextFromVerboseJSON(responseBody)
-	case "vtt":
-		text, err = getTextFromVTT(responseBody)
-	}
-
 	usage := &dto.Usage{}
-	usage.PromptTokens = info.PromptTokens
-	usage.CompletionTokens, _ = service.CountTextToken(text, info.UpstreamModelName)
+	usage.PromptTokens = audioTokens
+	usage.CompletionTokens = 0
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	return nil, usage
 }
 
-func getTextFromVTT(body []byte) (string, error) {
-	return getTextFromSRT(body)
-}
-
-func getTextFromVerboseJSON(body []byte) (string, error) {
-	var whisperResponse dto.WhisperVerboseJSONResponse
-	if err := json.Unmarshal(body, &whisperResponse); err != nil {
-		return "", fmt.Errorf("unmarshal_response_body_failed err :%w", err)
+func countAudioTokens(c *gin.Context) (int, error) {
+	body, err := common.GetRequestBody(c)
+	if err != nil {
+		return 0, errors.WithStack(err)
 	}
-	return whisperResponse.Text, nil
-}
 
-func getTextFromSRT(body []byte) (string, error) {
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
-	var builder strings.Builder
-	var textLine bool
-	for scanner.Scan() {
-		line := scanner.Text()
-		if textLine {
-			builder.WriteString(line)
-			textLine = false
-			continue
-		} else if strings.Contains(line, "-->") {
-			textLine = true
-			continue
-		}
+	var reqBody struct {
+		File *multipart.FileHeader `form:"file" binding:"required"`
 	}
-	if err := scanner.Err(); err != nil {
-		return "", err
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	if err = c.ShouldBind(&reqBody); err != nil {
+		return 0, errors.WithStack(err)
 	}
-	return builder.String(), nil
-}
 
-func getTextFromText(body []byte) (string, error) {
-	return strings.TrimSuffix(string(body), "\n"), nil
-}
-
-func getTextFromJSON(body []byte) (string, error) {
-	var whisperResponse dto.AudioResponse
-	if err := json.Unmarshal(body, &whisperResponse); err != nil {
-		return "", fmt.Errorf("unmarshal_response_body_failed err :%w", err)
+	reqFp, err := reqBody.File.Open()
+	if err != nil {
+		return 0, errors.WithStack(err)
 	}
-	return whisperResponse.Text, nil
+
+	tmpFp, err := os.CreateTemp("", "audio-*")
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	defer os.Remove(tmpFp.Name())
+
+	_, err = io.Copy(tmpFp, reqFp)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	if err = tmpFp.Close(); err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	duration, err := common.GetAudioDuration(c.Request.Context(), tmpFp.Name())
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	return int(math.Round(math.Ceil(duration) / 60.0 * 1000)), nil // 1 minute 相当于 1k tokens
 }
 
 func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*dto.OpenAIErrorWithStatusCode, *dto.RealtimeUsage) {

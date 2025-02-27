@@ -24,7 +24,7 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 	var err *dto.OpenAIErrorWithStatusCode
 	switch relayMode {
 	case relayconstant.RelayModeImagesGenerations:
-		err = relay.ImageHelper(c, relayMode)
+		err = relay.ImageHelper(c)
 	case relayconstant.RelayModeAudioSpeech:
 		fallthrough
 	case relayconstant.RelayModeAudioTranslation:
@@ -33,6 +33,8 @@ func relayHandler(c *gin.Context, relayMode int) *dto.OpenAIErrorWithStatusCode 
 		err = relay.AudioHelper(c)
 	case relayconstant.RelayModeRerank:
 		err = relay.RerankHelper(c, relayMode)
+	case relayconstant.RelayModeEmbeddings:
+		err = relay.EmbeddingHelper(c)
 	default:
 		err = relay.TextHelper(c)
 	}
@@ -83,6 +85,7 @@ func Relay(c *gin.Context) {
 
 	if openaiErr != nil {
 		if openaiErr.StatusCode == http.StatusTooManyRequests {
+			common.LogError(c, fmt.Sprintf("origin 429 error: %s", openaiErr.Error.Message))
 			openaiErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
 		openaiErr.Error.Message = common.MessageWithRequestId(openaiErr.Error.Message, requestId)

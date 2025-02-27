@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"io"
 	"log"
@@ -36,7 +37,7 @@ func SetupLogger() {
 			setupLogLock.Unlock()
 			setupLogWorking = false
 		}()
-		logPath := filepath.Join(*LogDir, fmt.Sprintf("oneapi-%s.log", time.Now().Format("20060102")))
+		logPath := filepath.Join(*LogDir, fmt.Sprintf("oneapi-%s.log", time.Now().Format("20060102150405")))
 		fd, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatal("failed to open log file")
@@ -80,9 +81,9 @@ func logHelper(ctx context.Context, level string, msg string) {
 	if logCount > maxLogCount && !setupLogWorking {
 		logCount = 0
 		setupLogWorking = true
-		go func() {
+		gopool.Go(func() {
 			SetupLogger()
-		}()
+		})
 	}
 }
 
@@ -97,6 +98,14 @@ func LogQuota(quota int) string {
 		return fmt.Sprintf("＄%.6f 额度", float64(quota)/QuotaPerUnit)
 	} else {
 		return fmt.Sprintf("%d 点额度", quota)
+	}
+}
+
+func FormatQuota(quota int) string {
+	if DisplayInCurrencyEnabled {
+		return fmt.Sprintf("＄%.6f", float64(quota)/QuotaPerUnit)
+	} else {
+		return fmt.Sprintf("%d", quota)
 	}
 }
 

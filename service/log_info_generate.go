@@ -13,6 +13,13 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["completion_ratio"] = completionRatio
 	other["model_price"] = modelPrice
 	other["frt"] = float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
+	if relayInfo.ReasoningEffort != "" {
+		other["reasoning_effort"] = relayInfo.ReasoningEffort
+	}
+	if relayInfo.IsModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	}
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = ctx.GetStringSlice("use_channel")
 	other["admin_info"] = adminInfo

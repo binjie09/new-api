@@ -1,14 +1,20 @@
 package common
 
 import (
+	"bytes"
+	"context"
 	crand "crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"html/template"
+	"io"
 	"log"
 	"math/big"
 	"math/rand"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -206,4 +212,50 @@ func MessageWithRequestId(message string, id string) string {
 func RandomSleep() {
 	// Sleep for 0-3000 ms
 	time.Sleep(time.Duration(rand.Intn(3000)) * time.Millisecond)
+}
+
+func GetPointer[T any](v T) *T {
+	return &v
+}
+
+func Any2Type[T any](data any) (T, error) {
+	var zero T
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return zero, err
+	}
+	var res T
+	err = json.Unmarshal(bytes, &res)
+	if err != nil {
+		return zero, err
+	}
+	return res, nil
+}
+
+// SaveTmpFile saves data to a temporary file. The filename would be apppended with a random string.
+func SaveTmpFile(filename string, data io.Reader) (string, error) {
+	f, err := os.CreateTemp(os.TempDir(), filename)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to create temporary file %s", filename)
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, data)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to copy data to temporary file %s", filename)
+	}
+
+	return f.Name(), nil
+}
+
+// GetAudioDuration returns the duration of an audio file in seconds.
+func GetAudioDuration(ctx context.Context, filename string) (float64, error) {
+	// ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {{input}}
+	c := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filename)
+	output, err := c.Output()
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get audio duration")
+	}
+
+	return strconv.ParseFloat(string(bytes.TrimSpace(output)), 64)
 }

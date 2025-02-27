@@ -15,7 +15,7 @@ import {
   Button, Descriptions,
   Form,
   Layout,
-  Modal,
+  Modal, Popover,
   Select,
   Space,
   Spin,
@@ -34,6 +34,7 @@ import {
 import Paragraph from '@douyinfe/semi-ui/lib/es/typography/paragraph';
 import { getLogOther } from '../helpers/other.js';
 import { StyleContext } from '../context/Style/index.js';
+import { IconInherit, IconRefresh } from '@douyinfe/semi-icons';
 
 const { Header } = Layout;
 
@@ -141,7 +142,78 @@ const LogsTable = () => {
         </Tag>
       );
     }
-  } 
+  }
+
+  function renderModelName(record) {
+
+    let other = getLogOther(record.other);
+    let modelMapped = other?.is_model_mapped && other?.upstream_model_name && other?.upstream_model_name !== '';
+    if (!modelMapped) {
+      return <Tag
+        color={stringToColor(record.model_name)}
+        size='large'
+        onClick={(event) => {
+          copyText(event, record.model_name).then(r => {});
+        }}
+      >
+        {' '}{record.model_name}{' '}
+      </Tag>;
+    } else {
+      return (
+        <>
+          <Space vertical align={'start'}>
+            <Popover content={
+              <div style={{padding: 10}}> 
+                <Space vertical align={'start'}>
+                  <Tag
+                    color={stringToColor(record.model_name)}
+                    size='large'
+                    onClick={(event) => {
+                      copyText(event, record.model_name).then(r => {});
+                    }}
+                  >
+                    {t('请求并计费模型')}{' '}{record.model_name}{' '}
+                  </Tag>
+                  <Tag
+                    color={stringToColor(other.upstream_model_name)}
+                    size='large'
+                    onClick={(event) => {
+                      copyText(event, other.upstream_model_name).then(r => {});
+                    }}
+                  >
+                    {t('实际模型')}{' '}{other.upstream_model_name}{' '}
+                  </Tag>
+                </Space>
+              </div>
+            }>
+              <Tag
+                color={stringToColor(record.model_name)}
+                size='large'
+                onClick={(event) => {
+                  copyText(event, record.model_name).then(r => {});
+                }}
+                suffixIcon={<IconRefresh style={{width: '0.8em', height: '0.8em', opacity: 0.6}} />}
+              >
+                {' '}{record.model_name}{' '}
+              </Tag>
+            </Popover>
+            {/*<Tooltip content={t('实际模型')}>*/}
+            {/*  <Tag*/}
+            {/*    color={stringToColor(other.upstream_model_name)}*/}
+            {/*    size='large'*/}
+            {/*    onClick={(event) => {*/}
+            {/*      copyText(event, other.upstream_model_name).then(r => {});*/}
+            {/*    }}*/}
+            {/*  >*/}
+            {/*    {' '}{other.upstream_model_name}{' '}*/}
+            {/*  </Tag>*/}
+            {/*</Tooltip>*/}
+          </Space>
+        </>
+      );
+    }
+
+  }
 
   const columns = [
     {
@@ -157,13 +229,15 @@ const LogsTable = () => {
           record.type === 0 || record.type === 2 ? (
             <div>
               {
-                <Tag
-                  color={colors[parseInt(text) % colors.length]}
-                  size='large'
-                >
-                  {' '}
-                  {text}{' '}
-                </Tag>
+                <Tooltip content={record.channel_name || '[未知]'}>
+                  <Tag
+                    color={colors[parseInt(text) % colors.length]}
+                    size='large'
+                  >
+                    {' '}
+                    {text}{' '}
+                  </Tag>
+                </Tooltip>
               }
             </div>
           ) : (
@@ -234,7 +308,12 @@ const LogsTable = () => {
               </>
             );
          } else {
-           let other = JSON.parse(record.other);
+           let other = null;
+           try {
+             other = JSON.parse(record.other);
+           } catch (e) {
+             console.error(`Failed to parse record.other: "${record.other}".`, e);
+           }
            if (other === null) {
              return <></>;
            }
@@ -265,18 +344,7 @@ const LogsTable = () => {
       dataIndex: 'model_name',
       render: (text, record, index) => {
         return record.type === 0 || record.type === 2 ? (
-          <>
-            <Tag
-              color={stringToColor(text)}
-              size='large'
-              onClick={(event) => {
-                copyText(event, text);
-              }}
-            >
-              {' '}
-              {text}{' '}
-            </Tag>
-          </>
+          <>{renderModelName(record)}</>
         ) : (
           <></>
         );
@@ -543,6 +611,12 @@ const LogsTable = () => {
         //   key: '渠道重试',
         //   value: content,
         // })
+      }      
+      if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2)) {
+        expandDataLocal.push({
+          key: t('渠道信息'),
+          value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`
+        });
       }
       if (other?.ws || other?.audio) {
         expandDataLocal.push({
@@ -567,6 +641,17 @@ const LogsTable = () => {
         value: logs[i].content,
       });
       if (logs[i].type === 2) {
+        let modelMapped = other?.is_model_mapped && other?.upstream_model_name && other?.upstream_model_name !== '';
+        if (modelMapped) {
+          expandDataLocal.push({
+            key: t('请求并计费模型'),
+            value: logs[i].model_name,
+          });
+          expandDataLocal.push({
+            key: t('实际模型'),
+            value: other.upstream_model_name,
+          });
+        }
         let content = '';
         if (other?.ws || other?.audio) {
           content = renderAudioModelPrice(
@@ -595,13 +680,17 @@ const LogsTable = () => {
           key: t('计费过程'),
           value: content,
         });
+        if (other?.reasoning_effort) {
+          expandDataLocal.push({
+            key: t('Reasoning Effort'),
+            value: other.reasoning_effort,
+          });
+        }
       }
-
       expandDatesLocal[logs[i].key] = expandDataLocal;
     }
 
     setExpandData(expandDatesLocal);
-
     setLogs(logs);
   };
 
@@ -825,6 +914,12 @@ const LogsTable = () => {
           dataSource={logs}
           rowKey="key"
           pagination={{
+            formatPageText: (page) =>
+              t('第 {{start}} - {{end}} 条，共 {{total}} 条', {
+                start: page.currentStart,
+                end: page.currentEnd,
+                total: logCount
+              }),
             currentPage: activePage,
             pageSize: pageSize,
             total: logCount,

@@ -26,7 +26,10 @@ func requestOpenAI2Ali(request dto.GeneralOpenAIRequest) *dto.GeneralOpenAIReque
 	return &request
 }
 
-func embeddingRequestOpenAI2Ali(request dto.GeneralOpenAIRequest) *AliEmbeddingRequest {
+func embeddingRequestOpenAI2Ali(request dto.EmbeddingRequest) *AliEmbeddingRequest {
+	if request.Model == "" {
+		request.Model = "text-embedding-v1"
+	}
 	return &AliEmbeddingRequest{
 		Model: request.Model,
 		Input: struct {

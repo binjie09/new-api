@@ -1,10 +1,8 @@
 package service
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pkoukk/tiktoken-go"
 	"image"
 	"log"
 	"math"
@@ -14,6 +12,8 @@ import (
 	relaycommon "one-api/relay/common"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/pkoukk/tiktoken-go"
 )
 
 // tokenEncoderMap won't grow after initialization
@@ -77,6 +77,9 @@ func getTokenEncoder(model string) *tiktoken.Tiktoken {
 }
 
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
+	if text == "" {
+		return 0
+	}
 	return len(tokenEncoder.Encode(text, nil, nil))
 }
 
@@ -92,13 +95,6 @@ func getImageToken(info *relaycommon.RelayInfo, imageUrl *dto.MessageImageUrl, m
 	if !constant.GetMediaTokenNotStream && !stream {
 		return 256, nil
 	}
-	// 是否统计图片token
-	if !constant.GetMediaToken {
-		return 256, nil
-	}
-	if info.ChannelType == common.ChannelTypeGemini || info.ChannelType == common.ChannelTypeVertexAi || info.ChannelType == common.ChannelTypeAnthropic {
-		return 256, nil
-	}
 	// 同步One API的图片计费逻辑
 	if imageUrl.Detail == "auto" || imageUrl.Detail == "" {
 		imageUrl.Detail = "high"
@@ -108,6 +104,13 @@ func getImageToken(info *relaycommon.RelayInfo, imageUrl *dto.MessageImageUrl, m
 	if strings.HasPrefix(model, "gpt-4o-mini") {
 		tileTokens = 5667
 		baseTokens = 2833
+	}
+	// 是否统计图片token
+	if !constant.GetMediaToken {
+		return 3 * baseTokens, nil
+	}
+	if info.ChannelType == common.ChannelTypeGemini || info.ChannelType == common.ChannelTypeVertexAi || info.ChannelType == common.ChannelTypeAnthropic {
+		return 3 * baseTokens, nil
 	}
 	var config image.Config
 	var err error
@@ -166,12 +169,7 @@ func CountTokenChatRequest(info *relaycommon.RelayInfo, request dto.GeneralOpenA
 	}
 	tkm += msgTokens
 	if request.Tools != nil {
-		toolsData, _ := json.Marshal(request.Tools)
-		var openaiTools []dto.OpenAITools
-		err := json.Unmarshal(toolsData, &openaiTools)
-		if err != nil {
-			return 0, errors.New(fmt.Sprintf("count_tools_token_fail: %s", err.Error()))
-		}
+		openaiTools := request.Tools
 		countStr := ""
 		for _, tool := range openaiTools {
 			countStr = tool.Function.Name
@@ -281,30 +279,25 @@ func CountTokenMessages(info *relaycommon.RelayInfo, messages []dto.Message, mod
 		tokenNum += tokensPerMessage
 		tokenNum += getTokenNum(tokenEncoder, message.Role)
 		if len(message.Content) > 0 {
-			if message.IsStringContent() {
-				stringContent := message.StringContent()
-				tokenNum += getTokenNum(tokenEncoder, stringContent)
-				if message.Name != nil {
-					tokenNum += tokensPerName
-					tokenNum += getTokenNum(tokenEncoder, *message.Name)
-				}
-			} else {
-				arrayContent := message.ParseContent()
-				for _, m := range arrayContent {
-					if m.Type == dto.ContentTypeImageURL {
-						imageUrl := m.ImageUrl.(dto.MessageImageUrl)
-						imageTokenNum, err := getImageToken(info, &imageUrl, model, stream)
-						if err != nil {
-							return 0, err
-						}
-						tokenNum += imageTokenNum
-						log.Printf("image token num: %d", imageTokenNum)
-					} else if m.Type == dto.ContentTypeInputAudio {
-						// TODO: 音频token数量计算
-						tokenNum += 100
-					} else {
-						tokenNum += getTokenNum(tokenEncoder, m.Text)
+			if message.Name != nil {
+				tokenNum += tokensPerName
+				tokenNum += getTokenNum(tokenEncoder, *message.Name)
+			}
+			arrayContent := message.ParseContent()
+			for _, m := range arrayContent {
+				if m.Type == dto.ContentTypeImageURL {
+					imageUrl := m.ImageUrl.(dto.MessageImageUrl)
+					imageTokenNum, err := getImageToken(info, &imageUrl, model, stream)
+					if err != nil {
+						return 0, err
 					}
+					tokenNum += imageTokenNum
+					log.Printf("image token num: %d", imageTokenNum)
+				} else if m.Type == dto.ContentTypeInputAudio {
+					// TODO: 音频token数量计算
+					tokenNum += 100
+				} else {
+					tokenNum += getTokenNum(tokenEncoder, m.Text)
 				}
 			}
 		}
@@ -321,6 +314,12 @@ func CountTokenInput(input any, model string) (int, error) {
 		text := ""
 		for _, s := range v {
 			text += s
+		}
+		return CountTextToken(text, model)
+	case []interface{}:
+		text := ""
+		for _, item := range v {
+			text += fmt.Sprintf("%v", item)
 		}
 		return CountTextToken(text, model)
 	}

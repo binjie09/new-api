@@ -1,8 +1,8 @@
 package model
 
 import (
-	"context"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"one-api/common"
 	"os"
 	"strings"
@@ -27,6 +27,7 @@ type Log struct {
 	UseTime          int    `json:"use_time" gorm:"default:0"`
 	IsStream         bool   `json:"is_stream" gorm:"default:false"`
 	ChannelId        int    `json:"channel" gorm:"index"`
+	ChannelName      string `json:"channel_name" gorm:"->"`
 	TokenId          int    `json:"token_id" gorm:"default:0;index"`
 	Group            string `json:"group" gorm:"index"`
 	Other            string `json:"other"`
@@ -42,6 +43,7 @@ const (
 
 func formatUserLogs(logs []*Log) {
 	for i := range logs {
+		logs[i].ChannelName = ""
 		var otherMap map[string]interface{}
 		otherMap = common.StrToMap(logs[i].Other)
 		if otherMap != nil {
@@ -85,14 +87,14 @@ func RecordLog(userId int, logType int, content string) {
 	}
 }
 
-func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptTokens int, completionTokens int,
+func RecordConsumeLog(c *gin.Context, userId int, channelId int, promptTokens int, completionTokens int,
 	modelName string, tokenName string, quota int, content string, tokenId int, userQuota int, useTimeSeconds int,
 	isStream bool, group string, other map[string]interface{}) {
-	common.LogInfo(ctx, fmt.Sprintf("record consume log: userId=%d, 用户调用前余额=%d, channelId=%d, promptTokens=%d, completionTokens=%d, modelName=%s, tokenName=%s, quota=%d, content=%s", userId, userQuota, channelId, promptTokens, completionTokens, modelName, tokenName, quota, content))
+	common.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, 用户调用前余额=%d, channelId=%d, promptTokens=%d, completionTokens=%d, modelName=%s, tokenName=%s, quota=%d, content=%s", userId, userQuota, channelId, promptTokens, completionTokens, modelName, tokenName, quota, content))
 	if !common.LogConsumeEnabled {
 		return
 	}
-	username, _ := GetUsernameById(userId, false)
+	username := c.GetString("username")
 	otherStr := common.MapToJsonStr(other)
 	log := &Log{
 		UserId:           userId,
@@ -114,7 +116,7 @@ func RecordConsumeLog(ctx context.Context, userId int, channelId int, promptToke
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
-		common.LogError(ctx, "failed to record log: "+err.Error())
+		common.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {
@@ -128,67 +130,97 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
 	} else {
-		tx = LOG_DB.Where("type = ?", logType)
+		tx = LOG_DB.Where("logs.type = ?", logType)
 	}
+
 	if modelName != "" {
-		tx = tx.Where("model_name like ?", modelName)
+		tx = tx.Where("logs.model_name like ?", modelName)
 	}
 	if username != "" {
-		tx = tx.Where("username = ?", username)
+		tx = tx.Where("logs.username = ?", username)
 	}
 	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
+		tx = tx.Where("logs.token_name = ?", tokenName)
 	}
 	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
 	}
 	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
 	}
 	if channel != 0 {
-		tx = tx.Where("channel_id = ?", channel)
+		tx = tx.Where("logs.channel_id = ?", channel)
 	}
 	if group != "" {
-		tx = tx.Where(groupCol+" = ?", group)
+		tx = tx.Where("logs."+groupCol+" = ?", group)
 	}
 	err = tx.Model(&Log{}).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
-	err = tx.Order("id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
 		return nil, 0, err
 	}
+
+	channelIds := make([]int, 0)
+	channelMap := make(map[int]string)
+	for _, log := range logs {
+		if log.ChannelId != 0 {
+			channelIds = append(channelIds, log.ChannelId)
+		}
+	}
+	if len(channelIds) > 0 {
+		var channels []struct {
+			Id   int    `gorm:"column:id"`
+			Name string `gorm:"column:name"`
+		}
+		if err = DB.Table("channels").Select("id, name").Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
+			return logs, total, err
+		}
+		for _, channel := range channels {
+			channelMap[channel.Id] = channel.Name
+		}
+		for i := range logs {
+			logs[i].ChannelName = channelMap[logs[i].ChannelId]
+		}
+	}
+
 	return logs, total, err
 }
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
-		tx = LOG_DB.Where("user_id = ?", userId)
+		tx = LOG_DB.Where("logs.user_id = ?", userId)
 	} else {
-		tx = LOG_DB.Where("user_id = ? and type = ?", userId, logType)
+		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
 	}
+
 	if modelName != "" {
-		tx = tx.Where("model_name like ?", modelName)
+		tx = tx.Where("logs.model_name like ?", modelName)
 	}
 	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
+		tx = tx.Where("logs.token_name = ?", tokenName)
 	}
 	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
 	}
 	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
 	}
 	if group != "" {
-		tx = tx.Where(groupCol+" = ?", group)
+		tx = tx.Where("logs."+groupCol+" = ?", group)
 	}
 	err = tx.Model(&Log{}).Count(&total).Error
 	if err != nil {
 		return nil, 0, err
 	}
-	err = tx.Order("id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
 	formatUserLogs(logs)
 	return logs, total, err
 }

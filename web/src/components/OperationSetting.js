@@ -58,6 +58,8 @@ const OperationSetting = () => {
     DefaultCollapseSidebar: false, // 默认折叠侧边栏
     RetryTimes: 0,
     Chats: "[]",
+    DemoSiteEnabled: false,
+    AutomaticDisableKeywords: '',
   });
 
   let [loading, setLoading] = useState(false);

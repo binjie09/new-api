@@ -1,6 +1,6 @@
 import i18next from 'i18next';
 import { Modal, Tag, Typography } from '@douyinfe/semi-ui';
-import { copy, showSuccess } from './utils.js';
+import { copy, isMobile, showSuccess } from './utils.js';
 
 export function renderText(text, limit) {
   if (text.length > limit) {
@@ -65,6 +65,73 @@ export function renderRatio(ratio) {
     color = 'blue';
   }
   return <Tag color={color}>{ratio}x {i18next.t('倍率')}</Tag>;
+}
+
+const measureTextWidth = (text, style = {
+  fontSize: '14px',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+}, containerWidth) => {
+  const span = document.createElement('span');
+  
+  span.style.visibility = 'hidden';
+  span.style.position = 'absolute';
+  span.style.whiteSpace = 'nowrap';
+  span.style.fontSize = style.fontSize;
+  span.style.fontFamily = style.fontFamily;
+  
+  span.textContent = text;
+  
+  document.body.appendChild(span);
+  const width = span.offsetWidth;
+  
+  document.body.removeChild(span);
+  
+  return width;
+};
+
+export function truncateText(text, maxWidth = 200) {
+  if (!isMobile()) {
+    return text;
+  }
+  if (!text) return text;
+  
+  try {
+    // Handle percentage-based maxWidth
+    let actualMaxWidth = maxWidth;
+    if (typeof maxWidth === 'string' && maxWidth.endsWith('%')) {
+      const percentage = parseFloat(maxWidth) / 100;
+      // Use window width as fallback container width
+      actualMaxWidth = window.innerWidth * percentage;
+    }
+    
+    const width = measureTextWidth(text);
+    if (width <= actualMaxWidth) return text;
+    
+    let left = 0;
+    let right = text.length;
+    let result = text;
+    
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const truncated = text.slice(0, mid) + '...';
+      const currentWidth = measureTextWidth(truncated);
+      
+      if (currentWidth <= actualMaxWidth) {
+        result = truncated;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.warn('Text measurement failed, falling back to character count', error);
+    if (text.length > 20) {
+      return text.slice(0, 17) + '...';
+    }
+    return text;
+  }
 }
 
 export const renderGroupOption = (item) => {
@@ -315,6 +382,9 @@ export function renderAudioModelPrice(
     if (completionRatio === undefined) {
       completionRatio = 0;
     }
+
+    // try toFixed audioRatio
+    audioRatio = parseFloat(audioRatio).toFixed(6);
     // 这里的 *2 是因为 1倍率=0.002刀，请勿删除
     let inputRatioPrice = modelRatio * 2.0;
     let completionRatioPrice = modelRatio * 2.0 * completionRatio;
@@ -326,13 +396,31 @@ export function renderAudioModelPrice(
     return (
       <>
         <article>
-          <p>提示：${inputRatioPrice} * {groupRatio} = ${inputRatioPrice * groupRatio} / 1M tokens</p>
-          <p>补全：${completionRatioPrice} * {groupRatio} = ${completionRatioPrice * groupRatio} / 1M tokens</p>
-          <p>音频提示：${inputRatioPrice} * {groupRatio} * {audioRatio} = ${inputRatioPrice * audioRatio * groupRatio} / 1M tokens</p>
-          <p>音频补全：${inputRatioPrice} * {groupRatio} * {audioRatio} * {audioCompletionRatio} = ${inputRatioPrice * audioRatio * audioCompletionRatio * groupRatio} / 1M tokens</p>
-          <p></p>
+          <p>{i18next.t('提示：${{price}} * {{ratio}} = ${{total}} / 1M tokens', {
+            price: inputRatioPrice,
+            ratio: groupRatio,
+            total: inputRatioPrice * groupRatio
+          })}</p>
+          <p>{i18next.t('补全：${{price}} * {{ratio}} = ${{total}} / 1M tokens', {
+            price: completionRatioPrice,
+            ratio: groupRatio,
+            total: completionRatioPrice * groupRatio
+          })}</p>
+          <p>{i18next.t('音频提示：${{price}} * {{ratio}} * {{audioRatio}} = ${{total}} / 1M tokens', {
+            price: inputRatioPrice,
+            ratio: groupRatio,
+            audioRatio,
+            total: inputRatioPrice * audioRatio * groupRatio
+          })}</p>
+          <p>{i18next.t('音频补全：${{price}} * {{ratio}} * {{audioRatio}} * {{audioCompRatio}} = ${{total}} / 1M tokens', {
+            price: inputRatioPrice,
+            ratio: groupRatio,
+            audioRatio,
+            audioCompRatio: audioCompletionRatio,
+            total: inputRatioPrice * audioRatio * audioCompletionRatio * groupRatio
+          })}</p>
           <p>
-            {i18next.t('提示 {{input}} tokens / 1M tokens * ${{price}} + 补全 {{completion}} tokens / 1M tokens * ${{compPrice}} +', {
+            {i18next.t('文字提示 {{input}} tokens / 1M tokens * ${{price}} + 文字补全 {{completion}} tokens / 1M tokens * ${{compPrice}} +', {
               input: inputTokens,
               price: inputRatioPrice,
               completion: completionTokens,
@@ -340,13 +428,21 @@ export function renderAudioModelPrice(
             })}
           </p>
           <p>
-            音频提示 {audioInputTokens} tokens / 1M tokens * ${inputRatioPrice} * {audioRatio} + 音频补全 {audioCompletionTokens} tokens / 1M tokens * ${inputRatioPrice} * {audioRatio} * {audioCompletionRatio}
+            {i18next.t('音频提示 {{input}} tokens / 1M tokens * ${{price}} * {{audioRatio}} + 音频补全 {{completion}} tokens / 1M tokens * ${{price}} * {{audioRatio}} * {{audioCompRatio}}', {
+              input: audioInputTokens,
+              completion: audioCompletionTokens,
+              price: inputRatioPrice,
+              audioRatio,
+              audioCompRatio: audioCompletionRatio
+            })}
           </p>
           <p>
-            （文字 + 音频） * 分组 {groupRatio} =
-            ${price.toFixed(6)}
+            {i18next.t('（文字 + 音频）* 分组倍率 {{ratio}} = ${{total}}', {
+              ratio: groupRatio,
+              total: price.toFixed(6)
+            })}
           </p>
-          <p>仅供参考，以实际扣费为准</p>
+          <p>{i18next.t('仅供参考，以实际扣费为准')}</p>
         </article>
       </>
     );
@@ -357,7 +453,7 @@ export function renderQuotaWithPrompt(quota, digits) {
   let displayInCurrency = localStorage.getItem('display_in_currency');
   displayInCurrency = displayInCurrency === 'true';
   if (displayInCurrency) {
-    return '|' + i18next.t('等价金额') + ': ' + renderQuota(quota, digits) + '';
+    return ' | ' + i18next.t('等价金额') + ': ' + renderQuota(quota, digits) + '';
   }
   return '';
 }
@@ -377,13 +473,13 @@ const colors = [
   'red',
   'teal',
   'violet',
-  'yellow',
+  'yellow'
 ];
 
 // 基础10色色板 (N ≤ 10)
 const baseColors = [
   '#1664FF', // 主色
-  '#1AC6FF', 
+  '#1AC6FF',
   '#FF8A00',
   '#3CC780',
   '#7442D4',
