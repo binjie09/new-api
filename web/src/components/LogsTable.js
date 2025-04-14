@@ -219,8 +219,34 @@ const LogsTable = () => {
         </>
       );
     }
-
   }
+
+function renderFirstUseTime(type) {
+  let time = parseFloat(type) / 1000.0;
+  time = time.toFixed(3);
+  if (time < 3) {
+    return (
+      <Tag color='green' size='large'>
+        {' '}
+        {time} s{' '}
+      </Tag>
+    );
+  } else if (time < 10) {
+    return (
+      <Tag color='orange' size='large'>
+        {' '}
+        {time} s{' '}
+      </Tag>
+    );
+  } else {
+    return (
+      <Tag color='red' size='large'>
+        {' '}
+        {time} s{' '}
+      </Tag>
+    );
+  }
+}
 
   // Define column keys for selection
   const COLUMN_KEYS = {
