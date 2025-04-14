@@ -35,7 +35,8 @@ type Channel struct {
 	AutoBan           *int    `json:"auto_ban" gorm:"default:1"`
 	OtherInfo         string  `json:"other_info"`
 	Tag               *string `json:"tag" gorm:"index"`
-	Setting           string  `json:"setting" gorm:"type:text"`
+	Setting           *string `json:"setting" gorm:"type:text"`
+	ParamOverride     *string `json:"param_override" gorm:"type:text"`
 }
 
 func (channel *Channel) GetModels() []string {
@@ -290,35 +291,42 @@ func (channel *Channel) Delete() error {
 
 var channelStatusLock sync.Mutex
 
-func UpdateChannelStatusById(id int, status int, reason string) {
+func UpdateChannelStatusById(id int, status int, reason string) bool {
 	if common.MemoryCacheEnabled {
 		channelStatusLock.Lock()
+		defer channelStatusLock.Unlock()
+
 		channelCache, _ := CacheGetChannel(id)
 		// 如果缓存渠道存在，且状态已是目标状态，直接返回
 		if channelCache != nil && channelCache.Status == status {
-			channelStatusLock.Unlock()
-			return
+			return false
 		}
 		// 如果缓存渠道不存在(说明已经被禁用)，且要设置的状态不为启用，直接返回
 		if channelCache == nil && status != common.ChannelStatusEnabled {
-			channelStatusLock.Unlock()
-			return
+			return false
 		}
 		CacheUpdateChannelStatus(id, status)
-		channelStatusLock.Unlock()
 	}
 	err := UpdateAbilityStatus(id, status == common.ChannelStatusEnabled)
 	if err != nil {
 		common.SysError("failed to update ability status: " + err.Error())
+		return false
 	}
 	channel, err := GetChannelById(id, true)
 	if err != nil {
 		// find channel by id error, directly update status
-		err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
-		if err != nil {
-			common.SysError("failed to update channel status: " + err.Error())
+		result := DB.Model(&Channel{}).Where("id = ?", id).Update("status", status)
+		if result.Error != nil {
+			common.SysError("failed to update channel status: " + result.Error.Error())
+			return false
+		}
+		if result.RowsAffected == 0 {
+			return false
 		}
 	} else {
+		if channel.Status == status {
+			return false
+		}
 		// find channel by id success, update status and other info
 		info := channel.GetOtherInfo()
 		info["status_reason"] = reason
@@ -328,9 +336,10 @@ func UpdateChannelStatusById(id int, status int, reason string) {
 		err = channel.Save()
 		if err != nil {
 			common.SysError("failed to update channel status: " + err.Error())
+			return false
 		}
 	}
-
+	return true
 }
 
 func EnableChannelByTag(tag string) error {
@@ -485,8 +494,8 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 
 func (channel *Channel) GetSetting() map[string]interface{} {
 	setting := make(map[string]interface{})
-	if channel.Setting != "" {
-		err := json.Unmarshal([]byte(channel.Setting), &setting)
+	if channel.Setting != nil && *channel.Setting != "" {
+		err := json.Unmarshal([]byte(*channel.Setting), &setting)
 		if err != nil {
 			common.SysError("failed to unmarshal setting: " + err.Error())
 		}
@@ -500,7 +509,18 @@ func (channel *Channel) SetSetting(setting map[string]interface{}) {
 		common.SysError("failed to marshal setting: " + err.Error())
 		return
 	}
-	channel.Setting = string(settingBytes)
+	channel.Setting = common.GetPointer[string](string(settingBytes))
+}
+
+func (channel *Channel) GetParamOverride() map[string]interface{} {
+	paramOverride := make(map[string]interface{})
+	if channel.ParamOverride != nil && *channel.ParamOverride != "" {
+		err := json.Unmarshal([]byte(*channel.ParamOverride), &paramOverride)
+		if err != nil {
+			common.SysError("failed to unmarshal param override: " + err.Error())
+		}
+	}
+	return paramOverride
 }
 
 func GetChannelsByIds(ids []int) ([]*Channel, error) {

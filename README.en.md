@@ -65,10 +65,18 @@
     - Add suffix `-low` to set low reasoning effort
 17. 🔄 Thinking to content option `thinking_to_content` in `Channel->Edit->Channel Extra Settings`, default is `false`, when `true`, the `reasoning_content` of the thinking content will be converted to `<think>` tags and concatenated to the content returned.
 18. 🔄 Model rate limit, support setting total request limit and successful request limit in `System Settings->Rate Limit Settings`
+19. 💰 Cache billing support, when enabled can charge a configurable ratio for cache hits:
+    1. Set `Prompt Cache Ratio` in `System Settings -> Operation Settings`
+    2. Set `Prompt Cache Ratio` in channel settings, range 0-1 (e.g., 0.5 means 50% charge on cache hits)
+    3. Supported channels:
+        - [x] OpenAI
+        - [x] Azure 
+        - [x] DeepSeek
+        - [ ] Claude
 
 ## Model Support
 This version additionally supports:
-1. Third-party model **gps** (gpt-4-gizmo-*)
+1. Third-party model **gpts** (gpt-4-gizmo-*)
 2. [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) interface, [Integration Guide](Midjourney.md)
 3. Custom channels with full API URL support
 4. [Suno API](https://github.com/Suno-API/Suno-API) interface, [Integration Guide](Suno.md)
@@ -162,7 +170,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtow
 
 ## Channel Retry
 Channel retry is implemented, configurable in `Settings->Operation Settings->General Settings`. **Cache recommended**.  
-First retry uses same priority, second retry uses next priority, and so on.
+If retry is enabled, the system will automatically use the next priority channel for the same request after a failed request.
 
 ### Cache Configuration
 1. `REDIS_CONN_STRING`: Use Redis as cache

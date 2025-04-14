@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"one-api/common"
 	"one-api/dto"
-	"one-api/model"
 	relaycommon "one-api/relay/common"
 	relayconstant "one-api/relay/constant"
 	"one-api/relay/helper"
@@ -75,12 +74,11 @@ func AudioHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 		relayInfo.PromptTokens = promptTokens
 	}
 
-	priceData := helper.ModelPriceHelper(c, relayInfo, preConsumedTokens, 0)
-
-	userQuota, err := model.GetUserQuota(relayInfo.UserId, false)
+	priceData, err := helper.ModelPriceHelper(c, relayInfo, preConsumedTokens, 0)
 	if err != nil {
-		return service.OpenAIErrorWrapperLocal(err, "get_user_quota_failed", http.StatusInternalServerError)
+		return service.OpenAIErrorWrapperLocal(err, "model_price_error", http.StatusInternalServerError)
 	}
+
 	preConsumedQuota, userQuota, openaiErr := preConsumeQuota(c, priceData.ShouldPreConsumedQuota, relayInfo)
 	if openaiErr != nil {
 		return openaiErr
@@ -119,7 +117,7 @@ func AudioHelper(c *gin.Context) (openaiErr *dto.OpenAIErrorWithStatusCode) {
 	if resp != nil {
 		httpResp = resp.(*http.Response)
 		if httpResp.StatusCode != http.StatusOK {
-			openaiErr = service.RelayErrorHandler(httpResp)
+			openaiErr = service.RelayErrorHandler(httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 			return openaiErr

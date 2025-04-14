@@ -86,7 +86,10 @@ func ImageHelper(c *gin.Context) *dto.OpenAIErrorWithStatusCode {
 
 	imageRequest.Model = relayInfo.UpstreamModelName
 
-	priceData := helper.ModelPriceHelper(c, relayInfo, 0, 0)
+	priceData, err := helper.ModelPriceHelper(c, relayInfo, 0, 0)
+	if err != nil {
+		return service.OpenAIErrorWrapperLocal(err, "model_price_error", http.StatusInternalServerError)
+	}
 	if !priceData.UsePrice {
 		// modelRatio 16 = modelPrice $0.04
 		// per 1 modelRatio = $0.04 / 16
@@ -152,7 +155,7 @@ func ImageHelper(c *gin.Context) *dto.OpenAIErrorWithStatusCode {
 		httpResp = resp.(*http.Response)
 		relayInfo.IsStream = relayInfo.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 		if httpResp.StatusCode != http.StatusOK {
-			openaiErr := service.RelayErrorHandler(httpResp)
+			openaiErr := service.RelayErrorHandler(httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 			return openaiErr

@@ -9,6 +9,7 @@ import (
 	"one-api/common"
 	relaycommon "one-api/relay/common"
 	"one-api/dto"
+	"one-api/relay/helper"
 	"one-api/service"
 	"strings"
 )
@@ -154,7 +155,7 @@ func aliStreamHandler(c *gin.Context, resp *http.Response) (*dto.OpenAIErrorWith
 		}
 		stopChan <- true
 	}()
-	service.SetEventStreamHeaders(c)
+	helper.SetEventStreamHeaders(c)
 	lastResponseText := ""
 	c.Stream(func(w io.Writer) bool {
 		select {

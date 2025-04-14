@@ -7,7 +7,6 @@ import SettingsLog from '../pages/Setting/Operation/SettingsLog.js';
 import SettingsDataDashboard from '../pages/Setting/Operation/SettingsDataDashboard.js';
 import SettingsMonitoring from '../pages/Setting/Operation/SettingsMonitoring.js';
 import SettingsCreditLimit from '../pages/Setting/Operation/SettingsCreditLimit.js';
-import SettingsMagnification from '../pages/Setting/Operation/SettingsMagnification.js';
 import ModelSettingsVisualEditor from '../pages/Setting/Operation/ModelSettingsVisualEditor.js';
 import GroupRatioSettings from '../pages/Setting/Operation/GroupRatioSettings.js';
 import ModelRatioSettings from '../pages/Setting/Operation/ModelRatioSettings.js';
@@ -16,6 +15,7 @@ import ModelRatioSettings from '../pages/Setting/Operation/ModelRatioSettings.js
 import { API, showError, showSuccess } from '../helpers';
 import SettingsChats from '../pages/Setting/Operation/SettingsChats.js';
 import { useTranslation } from 'react-i18next';
+import ModelRatioNotSetEditor from '../pages/Setting/Operation/ModelRationNotSetEditor.js';
 
 const OperationSetting = () => {
   const { t } = useTranslation();
@@ -27,13 +27,14 @@ const OperationSetting = () => {
     PreConsumedQuota: 0,
     StreamCacheQueueLength: 0,
     ModelRatio: '',
+    CacheRatio: '',
     CompletionRatio: '',
     ModelPrice: '',
     GroupRatio: '',
     UserUsableGroups: '',
     TopUpLink: '',
-    ChatLink: '',
-    ChatLink2: '', // 添加的新状态变量
+    'general_setting.docs_link': '',
+    // ChatLink2: '', // 添加的新状态变量
     QuotaPerUnit: 0,
     AutomaticDisableChannelEnabled: false,
     AutomaticEnableChannelEnabled: false,
@@ -59,6 +60,7 @@ const OperationSetting = () => {
     RetryTimes: 0,
     Chats: "[]",
     DemoSiteEnabled: false,
+    SelfUseModeEnabled: false,
     AutomaticDisableKeywords: '',
   });
 
@@ -75,7 +77,8 @@ const OperationSetting = () => {
           item.key === 'GroupRatio' ||
           item.key === 'UserUsableGroups' ||
           item.key === 'CompletionRatio' ||
-          item.key === 'ModelPrice'
+          item.key === 'ModelPrice' ||
+          item.key === 'CacheRatio'
         ) {
           item.value = JSON.stringify(JSON.parse(item.value), null, 2);
         }
@@ -157,6 +160,9 @@ const OperationSetting = () => {
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('可视化倍率设置')} itemKey="visual">
               <ModelSettingsVisualEditor options={inputs} refresh={onRefresh} />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={t('未设置倍率模型')} itemKey="unset_models">
+              <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
             </Tabs.TabPane>
           </Tabs>
         </Card>

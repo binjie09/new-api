@@ -12,25 +12,56 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type ThinkingContentInfo struct {
+	IsFirstThinkingContent  bool
+	SendLastThinkingContent bool
+	HasSentThinkingContent  bool
+}
+
+const (
+	LastMessageTypeNone     = "none"
+	LastMessageTypeText     = "text"
+	LastMessageTypeTools    = "tools"
+	LastMessageTypeThinking = "thinking"
+)
+
+type ClaudeConvertInfo struct {
+	LastMessagesType string
+	Index            int
+	Usage            *dto.Usage
+	FinishReason     string
+	Done             bool
+}
+
+const (
+	RelayFormatOpenAI = "openai"
+	RelayFormatClaude = "claude"
+)
+
+type RerankerInfo struct {
+	Documents       []any
+	ReturnDocuments bool
+}
+
 type RelayInfo struct {
-	ChannelType               int
-	ChannelId                 int
-	TokenId                   int
-	TokenKey                  string
-	UserId                    int
-	Group                     string
-	TokenUnlimited            bool
-	StartTime                 time.Time
-	FirstResponseTime         time.Time
-	IsFirstResponse           bool
-	SendLastReasoningResponse bool
-	ApiType                   int
-	IsStream                  bool
-	IsPlayground              bool
-	UsePrice                  bool
-	RelayMode                 int
-	UpstreamModelName         string
-	OriginModelName           string
+	ChannelType       int
+	ChannelId         int
+	TokenId           int
+	TokenKey          string
+	UserId            int
+	Group             string
+	TokenUnlimited    bool
+	StartTime         time.Time
+	FirstResponseTime time.Time
+	isFirstResponse   bool
+	//SendLastReasoningResponse bool
+	ApiType           int
+	IsStream          bool
+	IsPlayground      bool
+	UsePrice          bool
+	RelayMode         int
+	UpstreamModelName string
+	OriginModelName   string
 	//RecodeModelName      string
 	RequestURLPath       string
 	ApiVersion           string
@@ -50,9 +81,15 @@ type RelayInfo struct {
 	AudioUsage           bool
 	ReasoningEffort      string
 	ChannelSetting       map[string]interface{}
+	ParamOverride        map[string]interface{}
 	UserSetting          map[string]interface{}
 	UserEmail            string
 	UserQuota            int
+	RelayFormat          string
+	SendResponseCount    int
+	ThinkingContentInfo
+	ClaudeConvertInfo
+	*RerankerInfo
 }
 
 // 定义支持流式选项的通道类型
@@ -65,6 +102,7 @@ var streamSupportedChannels = map[int]bool{
 	common.ChannelTypeAzure:      true,
 	common.ChannelTypeVolcEngine: true,
 	common.ChannelTypeOllama:     true,
+	common.ChannelTypeXai:        true,
 }
 
 func GenRelayInfoWs(c *gin.Context, ws *websocket.Conn) *RelayInfo {
@@ -76,10 +114,31 @@ func GenRelayInfoWs(c *gin.Context, ws *websocket.Conn) *RelayInfo {
 	return info
 }
 
+func GenRelayInfoClaude(c *gin.Context) *RelayInfo {
+	info := GenRelayInfo(c)
+	info.RelayFormat = RelayFormatClaude
+	info.ShouldIncludeUsage = false
+	info.ClaudeConvertInfo = ClaudeConvertInfo{
+		LastMessagesType: LastMessageTypeNone,
+	}
+	return info
+}
+
+func GenRelayInfoRerank(c *gin.Context, req *dto.RerankRequest) *RelayInfo {
+	info := GenRelayInfo(c)
+	info.RelayMode = relayconstant.RelayModeRerank
+	info.RerankerInfo = &RerankerInfo{
+		Documents:       req.Documents,
+		ReturnDocuments: req.GetReturnDocuments(),
+	}
+	return info
+}
+
 func GenRelayInfo(c *gin.Context) *RelayInfo {
 	channelType := c.GetInt("channel_type")
 	channelId := c.GetInt("channel_id")
 	channelSetting := c.GetStringMap("channel_setting")
+	paramOverride := c.GetStringMap("param_override")
 
 	tokenId := c.GetInt("token_id")
 	tokenKey := c.GetString("token_key")
@@ -95,7 +154,7 @@ func GenRelayInfo(c *gin.Context) *RelayInfo {
 		UserQuota:         c.GetInt(constant.ContextKeyUserQuota),
 		UserSetting:       c.GetStringMap(constant.ContextKeyUserSetting),
 		UserEmail:         c.GetString(constant.ContextKeyUserEmail),
-		IsFirstResponse:   true,
+		isFirstResponse:   true,
 		RelayMode:         relayconstant.Path2RelayMode(c.Request.URL.Path),
 		BaseUrl:           c.GetString("base_url"),
 		RequestURLPath:    c.Request.URL.String(),
@@ -117,6 +176,12 @@ func GenRelayInfo(c *gin.Context) *RelayInfo {
 		ApiKey:         strings.TrimPrefix(c.Request.Header.Get("Authorization"), "Bearer "),
 		Organization:   c.GetString("channel_organization"),
 		ChannelSetting: channelSetting,
+		ParamOverride:  paramOverride,
+		RelayFormat:    RelayFormatOpenAI,
+		ThinkingContentInfo: ThinkingContentInfo{
+			IsFirstThinkingContent:  true,
+			SendLastThinkingContent: false,
+		},
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/pg") {
 		info.IsPlayground = true
@@ -147,9 +212,9 @@ func (info *RelayInfo) SetIsStream(isStream bool) {
 }
 
 func (info *RelayInfo) SetFirstResponseTime() {
-	if info.IsFirstResponse {
+	if info.isFirstResponse {
 		info.FirstResponseTime = time.Now()
-		info.IsFirstResponse = false
+		info.isFirstResponse = false
 	}
 }
 

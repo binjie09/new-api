@@ -44,15 +44,17 @@ type RealtimeUsage struct {
 }
 
 type InputTokenDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-	TextTokens   int `json:"text_tokens"`
-	AudioTokens  int `json:"audio_tokens"`
-	ImageTokens  int `json:"image_tokens"`
+	CachedTokens         int `json:"cached_tokens"`
+	CachedCreationTokens int `json:"-"`
+	TextTokens           int `json:"text_tokens"`
+	AudioTokens          int `json:"audio_tokens"`
+	ImageTokens          int `json:"image_tokens"`
 }
 
 type OutputTokenDetails struct {
-	TextTokens  int `json:"text_tokens"`
-	AudioTokens int `json:"audio_tokens"`
+	TextTokens      int `json:"text_tokens"`
+	AudioTokens     int `json:"audio_tokens"`
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 type RealtimeSession struct {
