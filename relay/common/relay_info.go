@@ -6,6 +6,7 @@ import (
 	"one-api/dto"
 	relayconstant "one-api/relay/constant"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -54,6 +55,7 @@ type RelayInfo struct {
 	StartTime         time.Time
 	FirstResponseTime time.Time
 	isFirstResponse   bool
+	responseMutex     sync.Mutex // Add mutex for protecting concurrent access
 	//SendLastReasoningResponse bool
 	ApiType           int
 	IsStream          bool
@@ -88,7 +90,7 @@ type RelayInfo struct {
 	RelayFormat          string
 	SendResponseCount    int
 	ThinkingContentInfo
-	ClaudeConvertInfo
+	*ClaudeConvertInfo
 	*RerankerInfo
 }
 
@@ -118,7 +120,7 @@ func GenRelayInfoClaude(c *gin.Context) *RelayInfo {
 	info := GenRelayInfo(c)
 	info.RelayFormat = RelayFormatClaude
 	info.ShouldIncludeUsage = false
-	info.ClaudeConvertInfo = ClaudeConvertInfo{
+	info.ClaudeConvertInfo = &ClaudeConvertInfo{
 		LastMessagesType: LastMessageTypeNone,
 	}
 	return info
@@ -212,10 +214,17 @@ func (info *RelayInfo) SetIsStream(isStream bool) {
 }
 
 func (info *RelayInfo) SetFirstResponseTime() {
+	info.responseMutex.Lock()
+	defer info.responseMutex.Unlock()
+
 	if info.isFirstResponse {
 		info.FirstResponseTime = time.Now()
 		info.isFirstResponse = false
 	}
+}
+
+func (info *RelayInfo) HasSendResponse() bool {
+	return info.FirstResponseTime.After(info.StartTime)
 }
 
 type TaskRelayInfo struct {

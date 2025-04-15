@@ -13,11 +13,14 @@ const ModelSetting = () => {
   let [inputs, setInputs] = useState({
     'gemini.safety_settings': '',
     'gemini.version_settings': '',
+    'gemini.supported_imagine_models': '',
     'claude.model_headers_settings': '',
     'claude.thinking_adapter_enabled': true,
     'claude.default_max_tokens': '',
     'claude.thinking_adapter_budget_tokens_percentage': 0.8,
     'global.pass_through_request_enabled': false,
+    'general_setting.ping_interval_enabled': false,
+    'general_setting.ping_interval_seconds': 60,
   });
 
   let [loading, setLoading] = useState(false);
@@ -32,7 +35,8 @@ const ModelSetting = () => {
           item.key === 'gemini.safety_settings' ||
           item.key === 'gemini.version_settings' ||
           item.key === 'claude.model_headers_settings'||
-          item.key === 'claude.default_max_tokens'
+          item.key === 'claude.default_max_tokens'||
+          item.key === 'gemini.supported_imagine_models'
         ) {
           item.value = JSON.stringify(JSON.parse(item.value), null, 2);
         }
