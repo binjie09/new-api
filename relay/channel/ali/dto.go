@@ -59,7 +59,6 @@ type AliEmbeddingResponse struct {
 		Embeddings []AliEmbedding `json:"embeddings"`
 	} `json:"output"`
 	Usage AliUsage `json:"usage"`
-	Model string `json:"model"`
 	AliError
 }
 
