@@ -133,6 +133,12 @@ function renderType(type, t) {
           {t('错误')}
         </Tag>
       );
+    case 6:
+      return (
+        <Tag color='teal' shape='circle'>
+          {t('退款')}
+        </Tag>
+      );
     default:
       return (
         <Tag color='grey' shape='circle'>
@@ -286,6 +292,44 @@ function renderModelName(record, copyText, t) {
   }
 }
 
+function toTokenNumber(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function formatTokenCount(value) {
+  return toTokenNumber(value).toLocaleString();
+}
+
+function getPromptCacheSummary(other) {
+  if (!other || typeof other !== 'object') {
+    return null;
+  }
+
+  const cacheReadTokens = toTokenNumber(other.cache_tokens);
+  const cacheCreationTokens = toTokenNumber(other.cache_creation_tokens);
+  const cacheCreationTokens5m = toTokenNumber(other.cache_creation_tokens_5m);
+  const cacheCreationTokens1h = toTokenNumber(other.cache_creation_tokens_1h);
+
+  const hasSplitCacheCreation =
+    cacheCreationTokens5m > 0 || cacheCreationTokens1h > 0;
+  const cacheWriteTokens = hasSplitCacheCreation
+    ? cacheCreationTokens5m + cacheCreationTokens1h
+    : cacheCreationTokens;
+
+  if (cacheReadTokens <= 0 && cacheWriteTokens <= 0) {
+    return null;
+  }
+
+  return {
+    cacheReadTokens,
+    cacheWriteTokens,
+  };
+}
+
 export const getLogsColumns = ({
   t,
   COLUMN_KEYS,
@@ -330,7 +374,7 @@ export const getLogsColumns = ({
         }
 
         return isAdminUser &&
-          (record.type === 0 || record.type === 2 || record.type === 5) ? (
+          (record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6) ? (
           <Space>
             <span style={{ position: 'relative', display: 'inline-block' }}>
               <Tooltip content={record.channel_name || t('未知渠道')}>
@@ -421,7 +465,7 @@ export const getLogsColumns = ({
       title: t('令牌'),
       dataIndex: 'token_name',
       render: (text, record, index) => {
-        return record.type === 0 || record.type === 2 || record.type === 5 ? (
+        return record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6 ? (
           <div>
             <Tag
               color='grey'
@@ -444,7 +488,7 @@ export const getLogsColumns = ({
       title: t('分组'),
       dataIndex: 'group',
       render: (text, record, index) => {
-        if (record.type === 0 || record.type === 2 || record.type === 5) {
+        if (record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6) {
           if (record.group) {
             return <>{renderGroup(record.group)}</>;
           } else {
@@ -484,7 +528,7 @@ export const getLogsColumns = ({
       title: t('模型'),
       dataIndex: 'model_name',
       render: (text, record, index) => {
-        return record.type === 0 || record.type === 2 || record.type === 5 ? (
+        return record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6 ? (
           <>{renderModelName(record, copyText, t)}</>
         ) : (
           <></>
@@ -524,11 +568,56 @@ export const getLogsColumns = ({
     },
     {
       key: COLUMN_KEYS.PROMPT,
-      title: t('输入'),
+      title: (
+        <div className='flex items-center gap-1'>
+          {t('输入')}
+          <Tooltip
+            content={t(
+              '根据 Anthropic 协定，/v1/messages 的输入 tokens 仅统计非缓存输入，不包含缓存读取与缓存写入 tokens。',
+            )}
+          >
+            <IconHelpCircle className='text-gray-400 cursor-help' />
+          </Tooltip>
+        </div>
+      ),
       dataIndex: 'prompt_tokens',
       render: (text, record, index) => {
-        return record.type === 0 || record.type === 2 || record.type === 5 ? (
-          <>{<span> {text} </span>}</>
+        const other = getLogOther(record.other);
+        const cacheSummary = getPromptCacheSummary(other);
+        const hasCacheRead = (cacheSummary?.cacheReadTokens || 0) > 0;
+        const hasCacheWrite = (cacheSummary?.cacheWriteTokens || 0) > 0;
+        let cacheText = '';
+        if (hasCacheRead && hasCacheWrite) {
+          cacheText = `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)} · ${t('写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
+        } else if (hasCacheRead) {
+          cacheText = `${t('缓存读')} ${formatTokenCount(cacheSummary.cacheReadTokens)}`;
+        } else if (hasCacheWrite) {
+          cacheText = `${t('缓存写')} ${formatTokenCount(cacheSummary.cacheWriteTokens)}`;
+        }
+
+        return record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6 ? (
+          <div
+            style={{
+              display: 'inline-flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              lineHeight: 1.2,
+            }}
+          >
+            <span>{text}</span>
+            {cacheText ? (
+              <span
+                style={{
+                  marginTop: 2,
+                  fontSize: 11,
+                  color: 'var(--semi-color-text-2)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cacheText}
+              </span>
+            ) : null}
+          </div>
         ) : (
           <></>
         );
@@ -540,7 +629,7 @@ export const getLogsColumns = ({
       dataIndex: 'completion_tokens',
       render: (text, record, index) => {
         return parseInt(text) > 0 &&
-          (record.type === 0 || record.type === 2 || record.type === 5) ? (
+          (record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6) ? (
           <>{<span> {text} </span>}</>
         ) : (
           <></>
@@ -552,7 +641,7 @@ export const getLogsColumns = ({
       title: t('花费'),
       dataIndex: 'quota',
       render: (text, record, index) => {
-        if (!(record.type === 0 || record.type === 2 || record.type === 5)) {
+        if (!(record.type === 0 || record.type === 2 || record.type === 5 || record.type === 6)) {
           return <></>;
         }
         const other = getLogOther(record.other);
@@ -639,6 +728,16 @@ export const getLogsColumns = ({
       fixed: 'right',
       render: (text, record, index) => {
         let other = getLogOther(record.other);
+        if (record.type === 6) {
+          return (
+            <Typography.Paragraph
+              ellipsis={{ rows: 2 }}
+              style={{ maxWidth: 240 }}
+            >
+              {t('异步任务退款')}
+            </Typography.Paragraph>
+          );
+        }
         if (other == null || record.type !== 2) {
           return (
             <Typography.Paragraph
