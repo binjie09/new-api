@@ -171,3 +171,47 @@ func TestRequestOpenAI2ClaudeMessage_AssistantToolCallWithEmptyContent(t *testin
 		assert.NotEqual(t, "", *contentBlocks[0].Text)
 	}
 }
+
+func TestRequestOpenAI2ClaudeMessage_AssistantToolCallWithMalformedArguments(t *testing.T) {
+	request := dto.GeneralOpenAIRequest{
+		Model: "claude-opus-4-6",
+		Messages: []dto.Message{
+			{
+				Role:    "user",
+				Content: "what time is it",
+			},
+		},
+	}
+	assistantMessage := dto.Message{
+		Role:    "assistant",
+		Content: "",
+	}
+	assistantMessage.SetToolCalls([]dto.ToolCallRequest{
+		{
+			ID:   "call_bad_args",
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:      "get_current_timestamp",
+				Arguments: "{",
+			},
+		},
+	})
+	request.Messages = append(request.Messages, assistantMessage)
+
+	claudeRequest, err := RequestOpenAI2ClaudeMessage(nil, request)
+	require.NoError(t, err)
+	require.Len(t, claudeRequest.Messages, 2)
+
+	assistantClaudeMessage := claudeRequest.Messages[1]
+	contentBlocks, ok := assistantClaudeMessage.Content.([]dto.ClaudeMediaMessage)
+	require.True(t, ok)
+	require.Len(t, contentBlocks, 1)
+
+	assert.Equal(t, "tool_use", contentBlocks[0].Type)
+	assert.Equal(t, "call_bad_args", contentBlocks[0].Id)
+	assert.Equal(t, "get_current_timestamp", contentBlocks[0].Name)
+
+	inputObj, ok := contentBlocks[0].Input.(map[string]any)
+	require.True(t, ok)
+	assert.Empty(t, inputObj)
+}
