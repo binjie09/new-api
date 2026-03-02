@@ -215,3 +215,41 @@ func TestRequestOpenAI2ClaudeMessage_AssistantToolCallWithMalformedArguments(t *
 	require.True(t, ok)
 	assert.Empty(t, inputObj)
 }
+
+func TestStreamResponseClaude2OpenAI_EmptyInputJSONDeltaFallback(t *testing.T) {
+	empty := ""
+	resp := &dto.ClaudeResponse{
+		Type:  "content_block_delta",
+		Index: func() *int { v := 1; return &v }(),
+		Delta: &dto.ClaudeMediaMessage{
+			Type:        "input_json_delta",
+			PartialJson: &empty,
+		},
+	}
+
+	chunk := StreamResponseClaude2OpenAI(resp)
+	require.NotNil(t, chunk)
+	require.Len(t, chunk.Choices, 1)
+	require.NotNil(t, chunk.Choices[0].Delta.ToolCalls)
+	require.Len(t, chunk.Choices[0].Delta.ToolCalls, 1)
+	assert.Equal(t, "{}", chunk.Choices[0].Delta.ToolCalls[0].Function.Arguments)
+}
+
+func TestStreamResponseClaude2OpenAI_NonEmptyInputJSONDeltaPreserved(t *testing.T) {
+	partial := `{"timezone":"Asia/Shanghai"}`
+	resp := &dto.ClaudeResponse{
+		Type:  "content_block_delta",
+		Index: func() *int { v := 1; return &v }(),
+		Delta: &dto.ClaudeMediaMessage{
+			Type:        "input_json_delta",
+			PartialJson: &partial,
+		},
+	}
+
+	chunk := StreamResponseClaude2OpenAI(resp)
+	require.NotNil(t, chunk)
+	require.Len(t, chunk.Choices, 1)
+	require.NotNil(t, chunk.Choices[0].Delta.ToolCalls)
+	require.Len(t, chunk.Choices[0].Delta.ToolCalls, 1)
+	assert.Equal(t, partial, chunk.Choices[0].Delta.ToolCalls[0].Function.Arguments)
+}
