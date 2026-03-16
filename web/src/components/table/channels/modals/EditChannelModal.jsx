@@ -182,6 +182,9 @@ const EditChannelModal = (props) => {
     priority: 0,
     weight: 0,
     tag: '',
+    header_validation: false,
+    header_match_name: '',
+    header_match_regex: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
     force_format: false,
@@ -3415,6 +3418,33 @@ const EditChannelModal = (props) => {
                       showClear
                       onChange={(value) => handleInputChange('remark', value)}
                     />
+
+                    <Form.Switch
+                      field='header_validation'
+                      label={t('校验请求头')}
+                      checkedText={t('开')}
+                      uncheckedText={t('关')}
+                      onChange={(value) => handleInputChange('header_validation', value)}
+                      extraText={t('开启后仅匹配指定请求头的请求才能使用该渠道')}
+                    />
+                    {inputs.header_validation && (
+                      <>
+                        <Form.Input
+                          field='header_match_name'
+                          label={t('请求头名称')}
+                          placeholder={t('例如: User-Agent')}
+                          showClear
+                          onChange={(value) => handleInputChange('header_match_name', value)}
+                        />
+                        <Form.Input
+                          field='header_match_regex'
+                          label={t('请求头正则')}
+                          placeholder={t('例如: ^MyApp/.*')}
+                          showClear
+                          onChange={(value) => handleInputChange('header_match_regex', value)}
+                        />
+                      </>
+                    )}
 
                     <Row gutter={12}>
                       <Col span={12}>
