@@ -46,6 +46,7 @@ export default function SettingsLog(props) {
   const [loadingCleanHistoryLog, setLoadingCleanHistoryLog] = useState(false);
   const [inputs, setInputs] = useState({
     LogConsumeEnabled: false,
+    LogRecordHeaderEnabled: false,
     historyTimestamp: dayjs().subtract(1, 'month').toDate(),
   });
   const refForm = useRef();
@@ -214,6 +215,24 @@ export default function SettingsLog(props) {
                       LogConsumeEnabled: value,
                     });
                   }}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'LogRecordHeaderEnabled'}
+                  label={t('记录请求头')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      LogRecordHeaderEnabled: value,
+                    });
+                  }}
+                  extraText={t(
+                    '开启后，日志将记录HTTP请求头信息（敏感信息会自动脱敏）',
+                  )}
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>

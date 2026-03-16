@@ -31,6 +31,50 @@ func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other
 	}
 }
 
+// sensitiveHeaders defines headers that should be filtered or masked.
+var sensitiveHeaders = map[string]bool{
+	"cookie":     true,
+	"set-cookie": true,
+	"x-api-key":  true,
+	"api-key":    true,
+}
+
+func sanitizeHeaderValue(key, value string) (string, bool) {
+	lowerKey := strings.ToLower(key)
+	if sensitiveHeaders[lowerKey] {
+		return "", false
+	}
+	if lowerKey == "authorization" {
+		if spaceIdx := strings.Index(value, " "); spaceIdx != -1 {
+			return value[:spaceIdx] + " ***", true
+		}
+		return "***", true
+	}
+	return value, true
+}
+
+func appendRequestHeaders(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || other == nil {
+		return
+	}
+	if !common.LogRecordHeaderEnabled {
+		return
+	}
+	headers := relayInfo.RequestHeaders
+	if len(headers) == 0 {
+		return
+	}
+	filtered := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if sanitized, ok := sanitizeHeaderValue(k, v); ok {
+			filtered[k] = sanitized
+		}
+	}
+	if len(filtered) > 0 {
+		other["request_headers"] = filtered
+	}
+}
+
 func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, groupRatio, completionRatio float64,
 	cacheTokens int, cacheRatio float64, modelPrice float64, userGroupRatio float64) map[string]interface{} {
 	other := make(map[string]interface{})
@@ -74,6 +118,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendBillingInfo(relayInfo, other)
+	appendRequestHeaders(relayInfo, other)
 	return other
 }
 
