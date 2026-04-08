@@ -74,6 +74,12 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
+var LogRecordHeaderEnabled = false
+
+var LogRecordIpEnabled = false
+
+var LogRecordBodyEnabled = false
+
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 

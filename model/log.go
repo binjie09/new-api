@@ -72,6 +72,57 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	return logs, err
 }
 
+var logSensitiveHeaders = map[string]bool{
+	"cookie":     true,
+	"set-cookie": true,
+	"x-api-key":  true,
+	"api-key":    true,
+}
+
+func appendRequestHeadersFromContext(c *gin.Context, other map[string]interface{}) {
+	if c == nil || c.Request == nil || other == nil {
+		return
+	}
+	headers := c.Request.Header
+	if len(headers) == 0 {
+		return
+	}
+	filtered := make(map[string]string, len(headers))
+	for k := range headers {
+		lowerKey := strings.ToLower(k)
+		if logSensitiveHeaders[lowerKey] {
+			continue
+		}
+		v := c.Request.Header.Get(k)
+		if lowerKey == "authorization" {
+			if spaceIdx := strings.Index(v, " "); spaceIdx != -1 {
+				v = v[:spaceIdx] + " ***"
+			} else {
+				v = "***"
+			}
+		}
+		filtered[k] = v
+	}
+	if len(filtered) > 0 {
+		other["request_headers"] = filtered
+	}
+}
+
+func appendRequestBodyFromContext(c *gin.Context, other map[string]interface{}) {
+	if c == nil || other == nil {
+		return
+	}
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return
+	}
+	bodyBytes, err := storage.Bytes()
+	if err != nil || len(bodyBytes) == 0 {
+		return
+	}
+	other["request_body"] = string(bodyBytes)
+}
+
 func RecordLog(userId int, logType int, content string) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
@@ -147,6 +198,12 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, content))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
+	if common.LogRecordHeaderEnabled {
+		appendRequestHeadersFromContext(c, other)
+	}
+	if common.LogRecordBodyEnabled {
+		appendRequestBodyFromContext(c, other)
+	}
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -208,6 +265,12 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
+	if common.LogRecordHeaderEnabled {
+		appendRequestHeadersFromContext(c, params.Other)
+	}
+	if common.LogRecordBodyEnabled {
+		appendRequestBodyFromContext(c, params.Other)
+	}
 	otherStr := common.MapToJsonStr(params.Other)
 	// 判断是否需要记录 IP
 	needRecordIp := false

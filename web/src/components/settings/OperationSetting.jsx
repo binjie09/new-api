@@ -45,6 +45,8 @@ const OperationSetting = () => {
     USDExchangeRate: 0,
     RetryTimes: 0,
     'general_setting.quota_display_type': 'USD',
+    'general_setting.custom_currency_symbol': '',
+    'general_setting.custom_currency_exchange_rate': 0,
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
     DemoSiteEnabled: false,
@@ -63,6 +65,9 @@ const OperationSetting = () => {
 
     /* 日志设置 */
     LogConsumeEnabled: false,
+    LogRecordHeaderEnabled: false,
+    LogRecordIpEnabled: false,
+    LogRecordBodyEnabled: false,
 
     /* 监控设置 */
     ChannelDisableThreshold: 0,

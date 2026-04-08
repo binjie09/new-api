@@ -46,6 +46,9 @@ export default function SettingsLog(props) {
   const [loadingCleanHistoryLog, setLoadingCleanHistoryLog] = useState(false);
   const [inputs, setInputs] = useState({
     LogConsumeEnabled: false,
+    LogRecordHeaderEnabled: false,
+    LogRecordIpEnabled: false,
+    LogRecordBodyEnabled: false,
     historyTimestamp: dayjs().subtract(1, 'month').toDate(),
   });
   const refForm = useRef();
@@ -214,6 +217,60 @@ export default function SettingsLog(props) {
                       LogConsumeEnabled: value,
                     });
                   }}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'LogRecordHeaderEnabled'}
+                  label={t('记录请求头')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      LogRecordHeaderEnabled: value,
+                    });
+                  }}
+                  extraText={t(
+                    '开启后，日志将记录HTTP请求头信息（敏感信息会自动脱敏）',
+                  )}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'LogRecordIpEnabled'}
+                  label={t('记录请求IP')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      LogRecordIpEnabled: value,
+                    });
+                  }}
+                  extraText={t(
+                    '开启后，消费和错误日志将记录请求发起者的IP地址及归属地信息',
+                  )}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'LogRecordBodyEnabled'}
+                  label={t('记录请求体')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      LogRecordBodyEnabled: value,
+                    });
+                  }}
+                  extraText={t(
+                    '开启后，日志将记录完整的HTTP请求体内容（可能占用较多存储空间）',
+                  )}
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>

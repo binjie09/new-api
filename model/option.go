@@ -47,6 +47,12 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
+<<<<<<< HEAD
+=======
+	common.OptionMap["LogRecordHeaderEnabled"] = strconv.FormatBool(common.LogRecordHeaderEnabled)
+	common.OptionMap["LogRecordIpEnabled"] = strconv.FormatBool(common.LogRecordIpEnabled)
+	common.OptionMap["LogRecordBodyEnabled"] = strconv.FormatBool(common.LogRecordBodyEnabled)
+>>>>>>> ec986a0b6 (feat: add request body logging option and fix settings state registration)
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -265,6 +271,12 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
+		case "LogRecordHeaderEnabled":
+			common.LogRecordHeaderEnabled = boolValue
+		case "LogRecordIpEnabled":
+			common.LogRecordIpEnabled = boolValue
+		case "LogRecordBodyEnabled":
+			common.LogRecordBodyEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
 			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
 			// true -> USD, false -> TOKENS

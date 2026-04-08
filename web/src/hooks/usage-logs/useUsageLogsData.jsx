@@ -646,6 +646,20 @@ export const useLogsData = () => {
           ),
         });
       }
+      if (other?.request_body) {
+        let bodyDisplay = other.request_body;
+        try {
+          bodyDisplay = JSON.stringify(JSON.parse(other.request_body), null, 2);
+        } catch (e) { /* not JSON, show as-is */ }
+        expandDataLocal.push({
+          key: t('请求体'),
+          value: (
+            <pre style={{ whiteSpace: 'pre-wrap', maxWidth: 600, wordBreak: 'break-word', lineHeight: 1.6, margin: 0, maxHeight: 400, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12 }}>
+              {bodyDisplay}
+            </pre>
+          ),
+        });
+      }
       if (other?.billing_source === 'subscription') {
         const planId = other?.subscription_plan_id;
         const planTitle = other?.subscription_plan_title || '';
