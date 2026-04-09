@@ -224,6 +224,17 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	if common.LogRecordResponseEnabled {
 		appendResponseDataFromContext(c, other)
 	}
+	if common.LogRecordOnErrorEnabled {
+		if !common.LogRecordHeaderEnabled {
+			appendRequestHeadersFromContext(c, other)
+		}
+		if !common.LogRecordBodyEnabled {
+			appendRequestBodyFromContext(c, other)
+		}
+		if !common.LogRecordResponseEnabled {
+			appendResponseDataFromContext(c, other)
+		}
+	}
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -616,4 +627,10 @@ func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64,
 	}
 
 	return total, nil
+}
+
+// isUpstreamErrorContent returns true if the log content indicates an upstream error.
+func isUpstreamErrorContent(content string) bool {
+	return strings.Contains(content, "可能是上游出错") ||
+		strings.Contains(content, "可能是上游超时")
 }
