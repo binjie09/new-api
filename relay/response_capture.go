@@ -55,7 +55,7 @@ func (w *captureWriter) getCaptured() []byte {
 // - For non-streaming: pre-reads resp.Body and replaces with a reader.
 // - For streaming: wraps c.Writer with a captureWriter.
 func PrepareResponseCapture(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) {
-	if !common.LogRecordResponseEnabled {
+	if !common.LogRecordResponseEnabled && !common.LogRecordOnErrorEnabled {
 		return
 	}
 	if resp == nil {
@@ -90,7 +90,7 @@ func PrepareResponseCapture(c *gin.Context, resp *http.Response, info *relaycomm
 // FinalizeResponseCapture reads captured streaming data from the writer wrapper
 // and stores it in the gin context.
 func FinalizeResponseCapture(c *gin.Context, info *relaycommon.RelayInfo) {
-	if !common.LogRecordResponseEnabled {
+	if !common.LogRecordResponseEnabled && !common.LogRecordOnErrorEnabled {
 		return
 	}
 	if !info.IsStream {
