@@ -90,7 +90,9 @@ func RerankHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
+	PrepareResponseCapture(c, httpResp, info)
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	FinalizeResponseCapture(c, info)
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)

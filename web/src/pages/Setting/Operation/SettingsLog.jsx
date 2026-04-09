@@ -49,6 +49,7 @@ export default function SettingsLog(props) {
     LogRecordHeaderEnabled: false,
     LogRecordIpEnabled: false,
     LogRecordBodyEnabled: false,
+    LogRecordResponseEnabled: false,
     historyTimestamp: dayjs().subtract(1, 'month').toDate(),
   });
   const refForm = useRef();
@@ -270,6 +271,24 @@ export default function SettingsLog(props) {
                   }}
                   extraText={t(
                     '开启后，日志将记录完整的HTTP请求体内容（可能占用较多存储空间）',
+                  )}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'LogRecordResponseEnabled'}
+                  label={t('记录响应头和响应体')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={(value) => {
+                    setInputs({
+                      ...inputs,
+                      LogRecordResponseEnabled: value,
+                    });
+                  }}
+                  extraText={t(
+                    '开启后，日志将记录上游响应头和完整响应体（流式和非流式均记录，可能占用较多存储空间）',
                   )}
                 />
               </Col>

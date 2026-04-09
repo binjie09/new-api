@@ -66,4 +66,9 @@ const (
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
 	ContextKeyIsStream ContextKey = "is_stream"
+
+	// ContextKeyResponseHeaders stores captured upstream response headers for logging
+	ContextKeyResponseHeaders ContextKey = "response_headers"
+	// ContextKeyResponseBody stores captured upstream response body for logging
+	ContextKeyResponseBody ContextKey = "response_body"
 )

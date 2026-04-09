@@ -80,6 +80,8 @@ var LogRecordIpEnabled = false
 
 var LogRecordBodyEnabled = false
 
+var LogRecordResponseEnabled = false
+
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 

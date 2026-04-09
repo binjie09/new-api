@@ -68,6 +68,7 @@ const OperationSetting = () => {
     LogRecordHeaderEnabled: false,
     LogRecordIpEnabled: false,
     LogRecordBodyEnabled: false,
+    LogRecordResponseEnabled: false,
 
     /* 监控设置 */
     ChannelDisableThreshold: 0,

@@ -660,6 +660,33 @@ export const useLogsData = () => {
           ),
         });
       }
+      if (other?.response_headers && typeof other.response_headers === 'object') {
+        const headerLines = Object.entries(other.response_headers)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n');
+        expandDataLocal.push({
+          key: t('响应头'),
+          value: (
+            <div style={{ whiteSpace: 'pre-line', maxWidth: 600, wordBreak: 'break-word', lineHeight: 1.6 }}>
+              {headerLines}
+            </div>
+          ),
+        });
+      }
+      if (other?.response_body) {
+        let bodyDisplay = other.response_body;
+        try {
+          bodyDisplay = JSON.stringify(JSON.parse(other.response_body), null, 2);
+        } catch (e) { /* not JSON, show as-is */ }
+        expandDataLocal.push({
+          key: t('响应体'),
+          value: (
+            <pre style={{ whiteSpace: 'pre-wrap', maxWidth: 600, wordBreak: 'break-word', lineHeight: 1.6, margin: 0, maxHeight: 400, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12 }}>
+              {bodyDisplay}
+            </pre>
+          ),
+        });
+      }
       if (other?.billing_source === 'subscription') {
         const planId = other?.subscription_plan_id;
         const planTitle = other?.subscription_plan_title || '';

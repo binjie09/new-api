@@ -235,7 +235,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	c.Header("X-New-Api-Other-Ratios", string(ratiosJSON))
 
 	// 11. 解析响应
+	PrepareResponseCapture(c, resp, info)
 	upstreamTaskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
+	FinalizeResponseCapture(c, info)
 	if taskErr != nil {
 		return nil, taskErr
 	}

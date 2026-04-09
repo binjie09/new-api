@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/types"
 
@@ -123,6 +124,22 @@ func appendRequestBodyFromContext(c *gin.Context, other map[string]interface{}) 
 	other["request_body"] = string(bodyBytes)
 }
 
+func appendResponseDataFromContext(c *gin.Context, other map[string]interface{}) {
+	if c == nil || other == nil {
+		return
+	}
+	if headersVal, ok := common.GetContextKey(c, constant.ContextKeyResponseHeaders); ok {
+		if headers, ok := headersVal.(map[string]string); ok && len(headers) > 0 {
+			other["response_headers"] = headers
+		}
+	}
+	if bodyVal, ok := common.GetContextKey(c, constant.ContextKeyResponseBody); ok {
+		if body, ok := bodyVal.(string); ok && body != "" {
+			other["response_body"] = body
+		}
+	}
+}
+
 func RecordLog(userId int, logType int, content string) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
@@ -204,6 +221,9 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	if common.LogRecordBodyEnabled {
 		appendRequestBodyFromContext(c, other)
 	}
+	if common.LogRecordResponseEnabled {
+		appendResponseDataFromContext(c, other)
+	}
 	otherStr := common.MapToJsonStr(other)
 	// 判断是否需要记录 IP
 	needRecordIp := false
@@ -270,6 +290,9 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	if common.LogRecordBodyEnabled {
 		appendRequestBodyFromContext(c, params.Other)
+	}
+	if common.LogRecordResponseEnabled {
+		appendResponseDataFromContext(c, params.Other)
 	}
 	otherStr := common.MapToJsonStr(params.Other)
 	// 判断是否需要记录 IP

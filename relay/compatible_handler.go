@@ -198,7 +198,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 	}
 
+	PrepareResponseCapture(c, httpResp, info)
 	usage, newApiErr := adaptor.DoResponse(c, httpResp, info)
+	FinalizeResponseCapture(c, info)
 	if newApiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
