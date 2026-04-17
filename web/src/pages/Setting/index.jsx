@@ -34,6 +34,7 @@ import {
   CreditCard,
   Server,
   Activity,
+  ShieldAlert,
 } from 'lucide-react';
 
 import SystemSetting from '../../components/settings/SystemSetting';
@@ -49,6 +50,7 @@ import DrawingSetting from '../../components/settings/DrawingSetting';
 import PaymentSetting from '../../components/settings/PaymentSetting';
 import ModelDeploymentSetting from '../../components/settings/ModelDeploymentSetting';
 import PerformanceSetting from '../../components/settings/PerformanceSetting';
+import UAMatchSetting from '../../components/settings/UAMatchSetting';
 
 const Setting = () => {
   const { t } = useTranslation();
@@ -147,6 +149,16 @@ const Setting = () => {
       ),
       content: <ModelDeploymentSetting />,
       itemKey: 'model-deployment',
+    });
+    panes.push({
+      tab: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <ShieldAlert size={18} />
+          {t('UA 匹配拦截')}
+        </span>
+      ),
+      content: <UAMatchSetting />,
+      itemKey: 'ua-match',
     });
     panes.push({
       tab: (
