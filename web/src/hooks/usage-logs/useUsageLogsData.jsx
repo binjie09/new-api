@@ -646,6 +646,19 @@ export const useLogsData = () => {
           ),
         });
       }
+      if (other?.request_headers && typeof other.request_headers === 'object') {
+        const headerLines = Object.entries(other.request_headers)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n');
+        expandDataLocal.push({
+          key: t('请求头'),
+          value: (
+            <div style={{ whiteSpace: 'pre-line', maxWidth: 600, wordBreak: 'break-word', lineHeight: 1.6 }}>
+              {headerLines}
+            </div>
+          ),
+        });
+      }
       if (other?.request_body) {
         let bodyDisplay = other.request_body;
         try {
