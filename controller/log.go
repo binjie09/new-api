@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,11 +22,13 @@ func GetAllLogs(c *gin.Context) {
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId)
+	ip := c.Query("ip")
+	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, ip)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	enrichLogsIpInfo(logs)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)
@@ -42,11 +45,13 @@ func GetUserLogs(c *gin.Context) {
 	modelName := c.Query("model_name")
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId)
+	ip := c.Query("ip")
+	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, ip)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	enrichLogsIpInfo(logs)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(logs)
 	common.ApiSuccess(c, pageInfo)
@@ -168,4 +173,25 @@ func DeleteHistoryLogs(c *gin.Context) {
 		"data":    count,
 	})
 	return
+}
+
+// enrichLogsIpInfo populates the IpInfo field on each log record by looking up
+// the client IP. The lookup is cached in-memory so repeated pagination views
+// do not trigger additional external requests.
+func enrichLogsIpInfo(logs []*model.Log) {
+	for _, log := range logs {
+		if log.Ip != "" {
+			info := service.GetIpInfo(log.Ip)
+			if info != nil {
+				log.IpInfo = &model.IpInfo{
+					Country:   info.Country,
+					Region:    info.Region,
+					City:      info.City,
+					Isp:       info.Isp,
+					IsPrivate: info.IsPrivate,
+					Display:   info.Display,
+				}
+			}
+		}
+	}
 }

@@ -1466,6 +1466,12 @@
     "开启之后将上游地址替换为服务器地址": "After enabling, the upstream address will be replaced with the server address",
     "开启后，using_group 会参与 cache key（不同分组隔离）。": "When enabled, using_group will be part of the cache key (isolated by group).",
     "开启后，仅\"消费\"和\"错误\"日志将记录您的客户端IP地址": "After enabling, only \"consumption\" and \"error\" logs will record your client IP address",
+    "记录请求头": "Record Request Headers",
+    "开启后，日志将记录HTTP请求头信息（敏感信息会自动脱敏）": "After enabling, logs will record HTTP request headers (sensitive information will be automatically masked)",
+    "记录请求IP": "Record Request IP",
+    "开启后，消费和错误日志将记录请求发起者的IP地址及归属地信息": "After enabling, consumption and error logs will record the requester's IP address and geolocation",
+    "请求头": "Request Headers",
+
     "开启后，对免费模型（倍率为0，或者价格为0）的模型也会预消耗额度": "After enabling, free models (ratio 0 or price 0) will also pre-consume quota",
     "开启后，将定期发送ping数据保持连接活跃": "After enabling, ping data will be sent periodically to keep the connection active",
     "开启后，当前分组渠道失败时会按顺序尝试下一个分组的渠道": "After enabling, when the current group channel fails, it will try the next group's channel in order",

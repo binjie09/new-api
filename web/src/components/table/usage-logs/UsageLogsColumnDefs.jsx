@@ -883,6 +883,24 @@ export const getLogsColumns = ({
           text;
         return showIp ? (
           <Tooltip content={text}>
+        if (!((record.type === 2 || record.type === 5) && text)) {
+          return <></>;
+        }
+        const ipInfo = record.ip_info;
+        let tooltipContent = text;
+        if (ipInfo && ipInfo.display) {
+          tooltipContent = (
+            <div>
+              <div>{text}</div>
+              <div style={{ color: 'var(--color-text-2)', fontSize: 12 }}>
+                {ipInfo.display}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <Tooltip content={tooltipContent}>
+
             <span>
               <Tag
                 color='orange'
@@ -893,10 +911,19 @@ export const getLogsColumns = ({
               >
                 {text}
               </Tag>
+              {ipInfo && ipInfo.display && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-text-2)',
+                    marginLeft: 4,
+                  }}
+                >
+                  {ipInfo.display}
+                </span>
+              )}
             </span>
           </Tooltip>
-        ) : (
-          <></>
         );
       },
     },

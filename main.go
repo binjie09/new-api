@@ -153,6 +153,17 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
+	// Configure trusted proxies from env (comma-separated CIDRs/IPs).
+	// Defaults to trusting private network ranges so that reverse-proxy
+	// headers (X-Forwarded-For, X-Real-IP) are honoured correctly.
+	// Set TRUSTED_PROXIES="" to disable (trust nobody).
+	if trustedProxies := common.GetEnvOrDefaultString("TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"); trustedProxies != "" {
+		if err := server.SetTrustedProxies(strings.Split(trustedProxies, ",")); err != nil {
+			common.SysError(fmt.Sprintf("failed to set trusted proxies: %v", err))
+		}
+	} else {
+		server.SetTrustedProxies(nil) // trust no proxy headers
+	}
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		common.SysLog(fmt.Sprintf("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{

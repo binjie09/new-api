@@ -51,6 +51,7 @@ export default function SettingsLog(props) {
     LogRecordBodyEnabled: false,
     LogRecordResponseEnabled: false,
     LogRecordOnErrorEnabled: false,
+
     historyTimestamp: dayjs().subtract(1, 'month').toDate(),
   });
   const refForm = useRef();
@@ -312,6 +313,7 @@ export default function SettingsLog(props) {
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+
                 <Spin spinning={loadingCleanHistoryLog}>
                   <Form.DatePicker
                     label={t('清除历史日志')}

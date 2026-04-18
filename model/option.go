@@ -52,6 +52,7 @@ func InitOptionMap() {
 	common.OptionMap["LogRecordBodyEnabled"] = strconv.FormatBool(common.LogRecordBodyEnabled)
 	common.OptionMap["LogRecordResponseEnabled"] = strconv.FormatBool(common.LogRecordResponseEnabled)
 	common.OptionMap["LogRecordOnErrorEnabled"] = strconv.FormatBool(common.LogRecordOnErrorEnabled)
+
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -281,6 +282,7 @@ func updateOptionMap(key string, value string) (err error) {
 			common.LogRecordResponseEnabled = boolValue
 		case "LogRecordOnErrorEnabled":
 			common.LogRecordOnErrorEnabled = boolValue
+
 		case "DisplayInCurrencyEnabled":
 			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
 			// true -> USD, false -> TOKENS
