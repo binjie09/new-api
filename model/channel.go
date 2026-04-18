@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -47,7 +49,10 @@ type Channel struct {
 	Setting           *string `json:"setting" gorm:"type:text"` // 渠道额外设置
 	ParamOverride     *string `json:"param_override" gorm:"type:text"`
 	HeaderOverride    *string `json:"header_override" gorm:"type:text"`
-	Remark            *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
+	Remark           *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
+	HeaderValidation *bool   `json:"header_validation" gorm:"default:false"`
+	HeaderMatchName  *string `json:"header_match_name" gorm:"type:varchar(255)"`
+	HeaderMatchRegex *string `json:"header_match_regex" gorm:"type:varchar(1024)"`
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
 
@@ -236,6 +241,25 @@ func (channel *Channel) GetTag() string {
 		return ""
 	}
 	return *channel.Tag
+}
+
+// MatchesRequestHeader checks if the request headers match the channel's header validation rule.
+// Returns true if validation is disabled, misconfigured, or the header value matches the regex.
+func (channel *Channel) MatchesRequestHeader(headers http.Header) bool {
+	if channel.HeaderValidation == nil || !*channel.HeaderValidation {
+		return true
+	}
+	if channel.HeaderMatchName == nil || *channel.HeaderMatchName == "" ||
+		channel.HeaderMatchRegex == nil || *channel.HeaderMatchRegex == "" {
+		return true
+	}
+	headerValue := headers.Get(*channel.HeaderMatchName)
+	matched, err := regexp.MatchString(*channel.HeaderMatchRegex, headerValue)
+	if err != nil {
+		// Regex compilation error — fail open to avoid blocking requests
+		return true
+	}
+	return matched
 }
 
 func (channel *Channel) SetTag(tag string) {

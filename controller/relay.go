@@ -297,22 +297,33 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+	const maxHeaderValidationAttempts = 10
+	for attempt := 0; attempt < maxHeaderValidationAttempts; attempt++ {
+		channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
-	if err != nil {
-		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-	if channel == nil {
-		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+
+		if err != nil {
+			return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if channel == nil {
+			return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+
+		if !channel.MatchesRequestHeader(c.Request.Header) {
+			retryParam.IncreaseRetry()
+			continue
+		}
+
+		newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
+		if newAPIError != nil {
+			return nil, newAPIError
+		}
+		return channel, nil
 	}
 
-	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if newAPIError != nil {
-		return nil, newAPIError
-	}
-	return channel, nil
+	return nil, types.NewError(fmt.Errorf("分组下模型 %s 的可用渠道均不匹配请求头校验", info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {

@@ -215,6 +215,9 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    header_validation: false,
+    header_match_name: '',
+    header_match_regex: '',
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -3633,6 +3636,34 @@ const EditChannelModal = (props) => {
                     )}
                     initValue={autoBan}
                   />
+
+                  {/* Header Validation */}
+                  <Form.Switch
+                    field='header_validation'
+                    label={t('校验请求头')}
+                    checkedText={t('开')}
+                    uncheckedText={t('关')}
+                    onChange={(value) => handleInputChange('header_validation', value)}
+                    extraText={t('开启后仅匹配指定请求头的请求才能使用该渠道')}
+                  />
+                  {inputs.header_validation && (
+                    <>
+                      <Form.Input
+                        field='header_match_name'
+                        label={t('请求头名称')}
+                        placeholder={t('例如: User-Agent')}
+                        showClear
+                        onChange={(value) => handleInputChange('header_match_name', value)}
+                      />
+                      <Form.Input
+                        field='header_match_regex'
+                        label={t('请求头正则')}
+                        placeholder={t('例如: ^MyApp/.*')}
+                        showClear
+                        onChange={(value) => handleInputChange('header_match_regex', value)}
+                      />
+                    </>
+                  )}
 
                   {/* Test Model - Core Config */}
                   <Form.Input

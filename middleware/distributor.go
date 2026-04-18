@@ -128,11 +128,13 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
+				const maxHeaderValidationAttempts = 10
+				for headerAttempt := 0; headerAttempt < maxHeaderValidationAttempts; headerAttempt++ {
 					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 						Ctx:        c,
 						ModelName:  modelRequest.Model,
 						TokenGroup: usingGroup,
-						Retry:      common.GetPointer(0),
+						Retry:      common.GetPointer(headerAttempt),
 					})
 					if err != nil {
 						showGroup := usingGroup
@@ -140,11 +142,6 @@ func Distribute() func(c *gin.Context) {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
 						}
 						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
-						// 如果错误，但是渠道不为空，说明是数据库一致性问题
-						//if channel != nil {
-						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
-						//	message = "数据库一致性已被破坏，请联系管理员"
-						//}
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
 						return
 					}
@@ -152,7 +149,17 @@ func Distribute() func(c *gin.Context) {
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
 						return
 					}
+					if channel.MatchesRequestHeader(c.Request.Header) {
+						break
+					}
+					// Header validation failed, try next channel
+					channel = nil
 				}
+				if channel == nil {
+					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+					return
+				}
+			}
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
