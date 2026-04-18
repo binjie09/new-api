@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"hash/fnv"
 	"regexp"
@@ -38,6 +39,11 @@ var (
 	channelAffinityUsageCacheStatsCache *cachex.HybridCache[ChannelAffinityUsageCacheCounters]
 
 	channelAffinityRegexCache sync.Map // map[string]*regexp.Regexp
+
+	// Fallback content-hash affinity constants
+	fallbackAffinityPrefix    = "fallback_content_hash"
+	maxFallbackTrimMessages   = 3
+	fallbackContentHashLength = 16
 )
 
 type channelAffinityMeta struct {
@@ -556,6 +562,9 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 		userAgent = c.Request.UserAgent()
 	}
 
+	// Track whether any rule matched (even without cache hit)
+	ruleMatched := false
+
 	for _, rule := range setting.Rules {
 		if !matchAnyRegexCached(rule.ModelRegex, modelName) {
 			continue
@@ -582,6 +591,7 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 			continue
 		}
 
+		ruleMatched = true
 		ttlSeconds := rule.TTLSeconds
 		if ttlSeconds <= 0 {
 			ttlSeconds = setting.DefaultTTLSeconds
@@ -613,7 +623,13 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 		if found {
 			return channelID, true
 		}
-		return 0, false
+	}
+
+	// Fallback: content-based affinity hash — only when no rule matched at all
+	if !ruleMatched && common.GetEnvOrDefaultBool("CHANNEL_AFFINITY_FALLBACK_CONTENT_HASH_ENABLED", false) {
+		if channelID, found := tryFallbackContentAffinity(c, modelName, usingGroup); found {
+			return channelID, true
+		}
 	}
 	return 0, false
 }
@@ -963,4 +979,174 @@ func channelAffinityUsageCacheStatsLock(key string) *sync.Mutex {
 	_, _ = h.Write([]byte(key))
 	idx := h.Sum32() % uint32(len(channelAffinityUsageCacheStatsLocks))
 	return &channelAffinityUsageCacheStatsLocks[idx]
+}
+
+// ---- Fallback content-hash affinity ----
+
+// extractMessageTextsFromBody extracts individual message text strings from the request body.
+// It handles both OpenAI and Claude message formats, including system prompts.
+func extractMessageTextsFromBody(c *gin.Context) []string {
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil
+	}
+	body, err := storage.Bytes()
+	if err != nil || len(body) == 0 {
+		return nil
+	}
+
+	var texts []string
+
+	// Extract system text (Claude format: top-level "system" field)
+	systemRes := gjson.GetBytes(body, "system")
+	if systemRes.Exists() {
+		switch systemRes.Type {
+		case gjson.String:
+			if t := strings.TrimSpace(systemRes.String()); t != "" {
+				texts = append(texts, t)
+			}
+		default:
+			// Array of content blocks
+			systemRes.ForEach(func(_, v gjson.Result) bool {
+				if t := v.Get("text").String(); t != "" {
+					texts = append(texts, t)
+				}
+				return true
+			})
+		}
+	}
+
+	// Extract message texts
+	messagesRes := gjson.GetBytes(body, "messages")
+	if messagesRes.IsArray() {
+		texts = appendMessageTexts(texts, messagesRes)
+	}
+
+	// Extract input texts (OpenAI Responses API format)
+	if len(texts) == 0 {
+		inputRes := gjson.GetBytes(body, "input")
+		if inputRes.IsArray() {
+			texts = appendMessageTexts(texts, inputRes)
+		}
+	}
+
+	return texts
+}
+
+// appendMessageTexts extracts text content from an array of messages and appends to texts.
+func appendMessageTexts(texts []string, messages gjson.Result) []string {
+	messages.ForEach(func(_, msg gjson.Result) bool {
+		content := msg.Get("content")
+		if !content.Exists() {
+			return true
+		}
+		switch content.Type {
+		case gjson.String:
+			if t := strings.TrimSpace(content.String()); t != "" {
+				texts = append(texts, t)
+			}
+		default:
+			// Array of content blocks (text, image_url, tool_use, etc.)
+			content.ForEach(func(_, block gjson.Result) bool {
+				blockType := block.Get("type").String()
+				if blockType == "text" || blockType == "" {
+					if t := block.Get("text").String(); t != "" {
+						texts = append(texts, t)
+					}
+				}
+				return true
+			})
+		}
+		return true
+	})
+	return texts
+}
+
+// computeFallbackContentHash concatenates texts with newline separators and returns a truncated SHA-256 hex digest.
+// Separator is critical to avoid collisions: "ab"+"cd" should differ from "abc"+"d".
+func computeFallbackContentHash(texts []string) string {
+	h := sha256.New()
+	for i, t := range texts {
+		if i > 0 {
+			_, _ = h.Write([]byte("\n"))
+		}
+		_, _ = h.Write([]byte(t))
+	}
+	hex := fmt.Sprintf("%x", h.Sum(nil))
+	if len(hex) >= fallbackContentHashLength {
+		return hex[:fallbackContentHashLength]
+	}
+	return hex
+}
+
+// buildFallbackCacheKeySuffix builds the cache key suffix for fallback content-hash affinity.
+func buildFallbackCacheKeySuffix(usingGroup string, hash string) string {
+	if usingGroup != "" {
+		return fmt.Sprintf("%s:%s:%s", fallbackAffinityPrefix, usingGroup, hash)
+	}
+	return fmt.Sprintf("%s:%s", fallbackAffinityPrefix, hash)
+}
+
+// tryFallbackContentAffinity tries content-based affinity lookup with progressive message trimming.
+// It computes hashes from the full message set, then progressively removes the last 1..3 messages
+// to find a previously cached channel ID.
+// Returns (channelID, found) and sets context for later recording.
+func tryFallbackContentAffinity(c *gin.Context, modelName string, usingGroup string) (int, bool) {
+	messageTexts := extractMessageTextsFromBody(c)
+	if len(messageTexts) == 0 {
+		return 0, false
+	}
+
+	cache := getChannelAffinityCache()
+	setting := operation_setting.GetChannelAffinitySetting()
+	ttlSeconds := setting.DefaultTTLSeconds
+	if ttlSeconds <= 0 {
+		ttlSeconds = 3600
+	}
+
+	// Try progressively: all messages, minus last 1, minus last 2, minus last 3
+	for trim := 0; trim <= maxFallbackTrimMessages && trim < len(messageTexts); trim++ {
+		subset := messageTexts[:len(messageTexts)-trim]
+		hash := computeFallbackContentHash(subset)
+		cacheKeySuffix := buildFallbackCacheKeySuffix(usingGroup, hash)
+		cacheKeyFull := channelAffinityCacheNamespace + ":" + cacheKeySuffix
+
+		channelID, found, err := cache.Get(cacheKeySuffix)
+		if err != nil {
+			common.SysError(fmt.Sprintf("fallback affinity cache get failed: key=%s, err=%v", cacheKeyFull, err))
+			continue
+		}
+		if found {
+			// Store the full-message hash context for recording
+			fullHash := computeFallbackContentHash(messageTexts)
+			fullCacheKeySuffix := buildFallbackCacheKeySuffix(usingGroup, fullHash)
+			fullCacheKey := channelAffinityCacheNamespace + ":" + fullCacheKeySuffix
+			setChannelAffinityContext(c, channelAffinityMeta{
+				CacheKey:       fullCacheKey,
+				TTLSeconds:     ttlSeconds,
+				RuleName:       fallbackAffinityPrefix,
+				UsingGroup:     usingGroup,
+				ModelName:      modelName,
+				KeySourceType:  "fallback_content_hash",
+				KeyFingerprint: fullHash[:min(8, len(fullHash))],
+			})
+			return channelID, true
+		}
+	}
+
+	// No cache hit — store context for recording on success
+	fullHash := computeFallbackContentHash(messageTexts)
+	fullCacheKeySuffix := buildFallbackCacheKeySuffix(usingGroup, fullHash)
+	fullCacheKey := channelAffinityCacheNamespace + ":" + fullCacheKeySuffix
+	setChannelAffinityContext(c, channelAffinityMeta{
+		CacheKey:       fullCacheKey,
+		TTLSeconds:     ttlSeconds,
+		RuleName:       fallbackAffinityPrefix,
+		UsingGroup:     usingGroup,
+		ModelName:      modelName,
+		KeySourceType:  "fallback_content_hash",
+		KeyFingerprint: fullHash[:min(8, len(fullHash))],
+	})
+
+	return 0, false
 }
